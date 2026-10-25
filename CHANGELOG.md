@@ -2,6 +2,11 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.1.0
+
+- **Drag and drop to move:** drag files or folders (or everything selected) onto a folder, or onto the ".." card to move up a level. Works in grid and list views.
+- **Right-click menu:** right-clicking a file or folder opens its menu at the pointer, like a native context menu (it did not open in the grid view before).
+
 ## 1.0.1
 
 - Installer: the PHP-extension check could report a false "missing PHP extension" on some runs (a pipe closed early). Fixed.

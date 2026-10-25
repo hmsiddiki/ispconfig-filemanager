@@ -1,6 +1,6 @@
 <template>
   <div id="dropzone" class="container"
-       @dragover="dropZone = can('upload') && ! isLoading ? true : false"
+       @dragover="onFileDrag"
        @dragleave="dropZone = false"
        @drop="dropZone = false"
   >
@@ -101,7 +101,7 @@
         >
           <template slot-scope="props">
             <b-table-column :label="lang('Name')" :custom-sort="sortByName" field="data.name" sortable>
-              <a class="is-block name" @click="itemClick(props.row)">
+              <a class="is-block name" :data-path="props.row.path" :data-type="props.row.type" @click="itemClick(props.row)">
                 <b-icon :icon="fileIcon(props.row)" :class="'fs-ico fs-ico-' + fileKind(props.row)" size="is-small" />
                 <span>{{ props.row.name }}</span>
               </a>
@@ -208,7 +208,7 @@
               </b-dropdown-item>
             </b-dropdown>
 
-            <a class="fs-body" @click="itemClick(row)">
+            <a class="fs-body" :data-path="row.path" :data-type="row.type" @click="itemClick(row)">
               <div class="fs-thumb">
                 <img v-if="row.type == 'file' && can('download') && isImage(row.path)" v-lazy="getDownloadLink(row.path)" :alt="row.name">
                 <b-icon v-else :icon="fileIcon(row)" :class="'fs-ico fs-ico-' + fileKind(row)" size="is-large" />
@@ -263,6 +263,8 @@ export default {
       perPage: this.$store.state.config.pagination[0],
       currentPage: 1,
       checked: [],
+      dragItems: null,
+      ctxPoint: null,
       isLoading: false,
       defaultSort: ['data.name', 'asc'],
       files: [],
@@ -325,11 +327,25 @@ export default {
       this.loadFiles()
     }
     document.addEventListener('click', this.flipMenu, true)
+    document.addEventListener('dragstart', this.onDragStart, true)
+    document.addEventListener('dragover', this.onDragOver, true)
+    document.addEventListener('drop', this.onDrop, true)
+    document.addEventListener('dragend', this.onDragEnd, true)
     window.addEventListener('scroll', this.placeMenus, true)
     window.addEventListener('resize', this.placeMenus)
   },
+  updated() {
+    // rows and cards can be dragged onto a folder (or the ".." card) to move them there
+    if (this.can('write')) {
+      document.querySelectorAll('tr.file-row:not(.type-back), .fs-card:not(.type-back)').forEach(el => el.setAttribute('draggable', 'true'))
+    }
+  },
   beforeDestroy() {
     document.removeEventListener('click', this.flipMenu, true)
+    document.removeEventListener('dragstart', this.onDragStart, true)
+    document.removeEventListener('dragover', this.onDragOver, true)
+    document.removeEventListener('drop', this.onDrop, true)
+    document.removeEventListener('dragend', this.onDragEnd, true)
     window.removeEventListener('scroll', this.placeMenus, true)
     window.removeEventListener('resize', this.placeMenus)
   },
@@ -337,7 +353,9 @@ export default {
     // An opened "..." menu is placed like a native context menu: fixed to the window, so no card or table can clip it,
     // below the button when there is room, above it when not, and always kept inside the window.
     placeMenus() {
-      document.querySelectorAll('.dropdown.is-active .dropdown-menu').forEach((menu) => {
+      const menus = document.querySelectorAll('.dropdown.is-active .dropdown-menu')
+      if (! menus.length) this.ctxPoint = null
+      menus.forEach((menu) => {
         const t = menu.parentNode.getBoundingClientRect()
         const vw = window.innerWidth
         const vh = window.innerHeight
@@ -349,14 +367,82 @@ export default {
         s.overflowY = 'auto'
         const w = menu.offsetWidth
         const h = menu.offsetHeight
-        let top = t.bottom + 4
-        if (top + h > vh - 8) top = t.top - h - 4
-        s.left = Math.max(8, Math.min(t.right - w, vw - w - 8)) + 'px'
+        const c = this.ctxPoint
+        let top = c ? c.y : t.bottom + 4
+        if (top + h > vh - 8) top = (c ? c.y : t.top - 4) - h
+        s.left = Math.max(8, Math.min(c ? c.x : t.right - w, vw - w - 8)) + 'px'
         s.top = Math.max(8, Math.min(top, vh - h - 8)) + 'px'
       })
     },
-    flipMenu() {
+    flipMenu(e) {
+      if (e && e.isTrusted) this.ctxPoint = null // a real click: menus belong to their button again
       setTimeout(this.placeMenus, 0)
+    },
+    onFileDrag(e) {
+      // the "drop files to upload" overlay is for files from the computer, not for rows being moved
+      const files = e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') > -1
+      this.dropZone = ! this.dragItems && files && this.can('upload') && ! this.isLoading
+    },
+    dragEntry(el) {
+      const row = el && el.closest ? el.closest('tr.file-row, .fs-card') : null
+      const a = row ? row.querySelector('[data-path]') : null
+      return a ? { row, path: a.dataset.path, type: a.dataset.type } : null
+    },
+    dropTarget(e) {
+      const ent = this.dragItems ? this.dragEntry(e.target) : null
+      if (! ent || (ent.type !== 'dir' && ent.type !== 'back')) return null
+      // not onto itself or into its own subfolder
+      if (this.dragItems.some(i => i.path === ent.path || ent.path.indexOf(i.path + '/') === 0)) return null
+      return ent
+    },
+    clearDropMarks() {
+      document.querySelectorAll('.fs-drop-target').forEach(el => el.classList.remove('fs-drop-target'))
+    },
+    onDragStart(e) {
+      this.dragItems = null
+      if (! this.can('write')) return
+      const ent = this.dragEntry(e.target)
+      if (! ent || ent.type === 'back') return
+      const item = this.content.find(r => r.path === ent.path && r.type === ent.type)
+      if (! item) return
+      this.dragItems = this.isChecked(item) && this.checked.length ? this.checked.slice() : [item]
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', this.dragItems.map(i => i.name).join(', '))
+    },
+    onDragOver(e) {
+      if (! this.dragItems) return
+      this.clearDropMarks()
+      const t = this.dropTarget(e)
+      if (t) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        t.row.classList.add('fs-drop-target')
+      }
+    },
+    onDrop(e) {
+      if (! this.dragItems) return
+      const t = this.dropTarget(e)
+      const items = this.dragItems
+      this.dragItems = null
+      this.clearDropMarks()
+      if (! t) return
+      e.preventDefault()
+      e.stopPropagation() // not an upload
+      this.isLoading = true
+      api.moveItems({ destination: t.path, items })
+        .then(() => {
+          this.isLoading = false
+          this.checked = []
+          this.loadFiles()
+        })
+        .catch(error => {
+          this.isLoading = false
+          this.handleError(error)
+        })
+    },
+    onDragEnd() {
+      this.dragItems = null
+      this.clearDropMarks()
     },
     readViewMode() {
       // default comes from the config ('default_view'), grid unless told otherwise
@@ -496,11 +582,15 @@ export default {
       }
     },
     rightClick(row, event) {
-      if (row.type == 'back') {
+      if (! row || row.type == 'back') {
         return
       }
       event.preventDefault()
-      this.$refs['ref-single-action-button-'+row.path].click()
+      const ref = this.$refs['ref-single-action-button-'+row.path]
+      const button = Array.isArray(ref) ? ref[0] : ref
+      if (! button) return
+      this.ctxPoint = { x: event.clientX, y: event.clientY } // the menu opens at the pointer, like a native context menu
+      button.click()
     },
     selectDir() {
       this.$modal.open({

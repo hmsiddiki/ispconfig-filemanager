@@ -150,6 +150,9 @@ html, body {
 		tr.is-checked, tr.is-checked:hover { background: var(--fs-accent-soft); }
 	}
 	.file-row a { color: var(--fs-text); }
+	// a folder that a dragged file would be moved into
+	.fs-drop-target { outline: 2px dashed var(--fs-accent); outline-offset: -2px; background: var(--fs-accent-soft) !important; }
+	.fs-card[draggable="true"], tr.file-row[draggable="true"] { cursor: grab; }
 	.file-row a.name { display: flex; align-items: center; }
 	.file-row.type-dir a.name { font-weight: 600; }
 	.b-table .table-wrapper + .level { margin-top: 1rem; }
