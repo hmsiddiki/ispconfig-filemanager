@@ -1,0 +1,48 @@
+name: Release
+
+# Push a tag like v1.0.0 (it must match the VERSION file) and the package is built and attached to a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match VERSION
+        run: |
+          [ "${GITHUB_REF_NAME#v}" = "$(tr -d '[:space:]' < VERSION)" ] || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, mbstring, zip, ftp, openssl
+          tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+
+      - name: Tests
+        run: ./tests/run.sh
+
+      - name: Build
+        run: |
+          composer install --no-dev --optimize-autoloader --no-interaction
+          npm ci --ignore-scripts
+          NODE_OPTIONS=--openssl-legacy-provider npm run build
+          ./scripts/build-package.sh
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/ispconfig-filemanager-*.tar.gz
+            release/ispconfig-filemanager-*.tar.gz.sha256
+          generate_release_notes: true

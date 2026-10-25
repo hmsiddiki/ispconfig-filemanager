@@ -1,0 +1,346 @@
+// Modern file-manager look. Pure restyle: colours, spacing, shapes. No behaviour here.
+// Everything is scoped under #wrapper so it beats the component-scoped stock styles.
+
+:root {
+	--fs-bg: #f4f5f7;
+	--fs-surface: #ffffff;
+	--fs-surface-2: #f8f9fb;
+	--fs-border: #e3e6eb;
+	--fs-text: #2b3040;
+	--fs-muted: #7a8194;
+	--fs-accent: #3f6ad8;
+	--fs-accent-soft: rgba(63, 106, 216, 0.1);
+	--fs-radius: 10px;
+	--fs-max-width: 1440px; // widest the content gets; the config can change it, an embedded file manager ignores it
+	--fs-shadow: 0 1px 2px rgba(20, 25, 40, 0.05), 0 4px 14px rgba(20, 25, 40, 0.05);
+	--fs-dir: #f2b134;
+	--fs-image: #1fa97a;
+	--fs-pdf: #e0483e;
+	--fs-archive: #8b5cf6;
+	--fs-video: #e0699c;
+	--fs-audio: #0ea5c6;
+	--fs-code: #3f6ad8;
+	--fs-text-file: #6b7280;
+}
+
+// Dark values, written once and used for both ways of getting dark:
+//   - the user (or the embedding page) chose it:   <html data-theme="dark">
+//   - nobody chose and the OS prefers dark:         no data-theme attribute at all
+@mixin fs-dark-vars {
+	--fs-bg: #14161b;
+	--fs-surface: #1c1f26;
+	--fs-surface-2: #22262e;
+	--fs-border: #2e333d;
+	--fs-text: #e6e8ee;
+	--fs-muted: #9099ab;
+	--fs-accent: #6b8cf0;
+	--fs-accent-soft: rgba(107, 140, 240, 0.16);
+	--fs-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme="dark"] {
+	@include fs-dark-vars;
+	color-scheme: dark; // native scrollbars, form controls and the like
+}
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]):not([data-theme="dark"]) {
+		@include fs-dark-vars;
+		color-scheme: dark;
+	}
+}
+
+html, body {
+	background: var(--fs-bg);
+	color: var(--fs-text);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+#wrapper {
+	a { color: var(--fs-accent); }
+
+	// ---- top bar -------------------------------------------------------
+	.navbar {
+		background: var(--fs-surface);
+		border-bottom: 1px solid var(--fs-border);
+		border-radius: var(--fs-radius);
+		box-shadow: var(--fs-shadow);
+		padding: 0.35rem 0.75rem;
+		min-height: 3.5rem;
+
+		.navbar-item, .navbar-link { color: var(--fs-text); border-radius: 8px; }
+		a.navbar-item:hover { background: var(--fs-accent-soft); color: var(--fs-accent); }
+		.navbar-burger span { background-color: var(--fs-text); }
+
+		.logo { padding: 0 0.5rem; }
+		.logo img { max-height: 2rem; width: auto; }
+		.brand-name { white-space: nowrap; font-weight: 700; font-size: 1.05rem; margin-left: 0.6rem; letter-spacing: 0.2px; color: var(--fs-text); }
+
+		.avatar {
+			display: inline-flex; align-items: center; justify-content: center;
+			width: 1.75rem; height: 1.75rem; margin-right: 0.5rem;
+			border-radius: 50%; background: var(--fs-accent); color: #fff; font-size: 0.8rem; font-weight: 700;
+		}
+	}
+
+	// ---- browser surface ----------------------------------------------
+	#browser { margin: 24px auto 80px auto; }
+
+	.breadcrumb {
+		background: var(--fs-surface);
+		border: 1px solid var(--fs-border);
+		border-radius: 999px;
+		padding: 0.35rem 1rem;
+		margin-bottom: 0.75rem;
+		ul { align-items: center; }
+		a { color: var(--fs-text); font-weight: 600; padding: 0 0.6em; &:hover { color: var(--fs-accent); } }
+		li + li::before { color: var(--fs-muted); }
+		li.is-active a, li:last-child a { color: var(--fs-accent); }
+	}
+
+	.fs-tools a, .view-toggle {
+		display: inline-flex; align-items: center; justify-content: center;
+		width: 2.2rem; height: 2.2rem; margin-left: 0.25rem;
+		border-radius: 8px; color: var(--fs-muted);
+		&:hover { background: var(--fs-accent-soft); color: var(--fs-accent); }
+	}
+
+	#multi-actions {
+		min-height: 3.2rem;
+		align-items: center;
+		a {
+			margin: 0 0.5rem 0.75rem 0;
+			padding: 0.4rem 0.85rem;
+			border: 1px solid var(--fs-border);
+			border-radius: 8px;
+			background: var(--fs-surface);
+			color: var(--fs-text);
+			font-weight: 500;
+			&:hover { border-color: var(--fs-accent); color: var(--fs-accent); }
+		}
+		.dropdown-item { border: 0; margin: 0; }
+	}
+
+	// ---- list view -----------------------------------------------------
+	.table-wrapper, .b-table .table-wrapper { border-radius: var(--fs-radius); overflow: visible !important; }
+	.dropdown-menu { z-index: 50; }
+	.table {
+		background: var(--fs-surface);
+		color: var(--fs-text);
+		border-radius: var(--fs-radius);
+		box-shadow: var(--fs-shadow);
+		// no overflow: hidden here: it clipped the row menus. The corners are rounded on the cells instead.
+		thead tr:first-child th:first-child { border-top-left-radius: var(--fs-radius); }
+		thead tr:first-child th:last-child { border-top-right-radius: var(--fs-radius); }
+		tbody tr:last-child td:first-child { border-bottom-left-radius: var(--fs-radius); }
+		tbody tr:last-child td:last-child { border-bottom-right-radius: var(--fs-radius); }
+		thead th {
+			background: var(--fs-surface-2);
+			color: var(--fs-muted);
+			font-size: 0.75rem;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			border-bottom: 1px solid var(--fs-border);
+			font-weight: 600;
+		}
+		td { border-color: var(--fs-border); vertical-align: middle; color: var(--fs-text); }
+		&.is-hoverable tbody tr:not(.is-selected):hover { background: var(--fs-accent-soft); }
+		tr.is-checked, tr.is-checked:hover { background: var(--fs-accent-soft); }
+	}
+	.file-row a { color: var(--fs-text); }
+	.file-row a.name { display: flex; align-items: center; }
+	.file-row.type-dir a.name { font-weight: 600; }
+	.b-table .table-wrapper + .level { margin-top: 1rem; }
+
+	// ---- file-type icons ----------------------------------------------
+	.fs-ico { margin-right: 0.6rem; }
+	.fs-ico-dir, .fs-ico-back { color: var(--fs-dir); }
+	.fs-ico-image { color: var(--fs-image); }
+	.fs-ico-pdf { color: var(--fs-pdf); }
+	.fs-ico-archive { color: var(--fs-archive); }
+	.fs-ico-video { color: var(--fs-video); }
+	.fs-ico-audio { color: var(--fs-audio); }
+	.fs-ico-code { color: var(--fs-code); }
+	.fs-ico-text, .fs-ico-file { color: var(--fs-text-file); }
+
+	// ---- grid view -----------------------------------------------------
+	.fs-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+		gap: 14px;
+	}
+	.fs-card {
+		position: relative;
+		background: var(--fs-surface);
+		border: 1px solid var(--fs-border);
+		border-radius: var(--fs-radius);
+		box-shadow: var(--fs-shadow);
+		transition: border-color 0.12s, transform 0.12s;
+		&:hover { border-color: var(--fs-accent); }   // no transform: it would make the fixed-position menu relative to the card
+		&.is-checked { border-color: var(--fs-accent); background: var(--fs-accent-soft); }
+
+		.fs-body { display: block; padding: 10px 10px 12px; color: var(--fs-text); }
+		.fs-thumb {
+			height: 112px; display: flex; align-items: center; justify-content: center;
+			background: var(--fs-surface-2); border-radius: 8px; overflow: hidden; margin-bottom: 10px;
+			img { width: 100%; height: 100%; object-fit: cover; }
+			.fs-ico { margin: 0; }
+			.icon.is-large { height: 3rem; width: 3rem; i { font-size: 2.4rem; } }
+		}
+		.fs-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.fs-meta { color: var(--fs-muted); font-size: 0.75rem; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+		.fs-check, .fs-more { position: absolute; top: 14px; z-index: 2; opacity: 0; transition: opacity 0.12s; }
+		.fs-check { left: 16px; background: var(--fs-surface); border-radius: 6px; padding: 3px 5px; line-height: 1; input { cursor: pointer; } }
+		.fs-more { right: 16px; .button { height: 1.9rem; width: 1.9rem; padding: 0; border-radius: 8px; } }
+		&:hover .fs-check, &:hover .fs-more, &.is-checked .fs-check { opacity: 1; }
+		// a card whose menu is open must paint above the cards after it (the hover transform makes each card its own layer)
+		&:hover, &:focus-within, &:has(.dropdown.is-active) { z-index: 30; }
+		.dropdown-menu { z-index: 40; }
+	}
+	@media (hover: none) {
+		.fs-card .fs-check, .fs-card .fs-more { opacity: 1; }
+	}
+
+	// ---- shared widgets ------------------------------------------------
+	.box, .modal-card-body, .modal-card-head, .modal-card-foot { background: var(--fs-surface); color: var(--fs-text); }
+	.modal-card { border-radius: var(--fs-radius); overflow: hidden; box-shadow: var(--fs-shadow); }
+	.modal-card-head, .modal-card-foot { border-color: var(--fs-border); }
+	.modal-card-title, .label { color: var(--fs-text); }
+	.input, .textarea, .select select {
+		background: var(--fs-surface-2); border-color: var(--fs-border); color: var(--fs-text); border-radius: 8px; box-shadow: none;
+		&:focus { border-color: var(--fs-accent); box-shadow: 0 0 0 3px var(--fs-accent-soft); }
+	}
+	.button { border-radius: 8px; font-weight: 500; }
+	.button.is-primary { background: var(--fs-accent); border-color: transparent; color: #fff; &:hover { filter: brightness(1.08); } }
+	.dropdown-content { background: var(--fs-surface); border: 1px solid var(--fs-border); border-radius: var(--fs-radius); box-shadow: var(--fs-shadow); padding: 0.35rem; }
+	.dropdown-item { color: var(--fs-text); border-radius: 6px; &:hover { background: var(--fs-accent-soft); color: var(--fs-accent); } }
+	#bottom-info { color: var(--fs-muted); font-size: 0.85rem; }
+
+	// ---- login ---------------------------------------------------------
+	#login {
+		min-height: 100%; align-items: center; padding: 8vh 20px;
+		.box {
+			width: 380px; max-width: 100%; padding: 36px 32px;
+			border-radius: 16px; border: 1px solid var(--fs-border); box-shadow: var(--fs-shadow);
+		}
+		.login-brand {
+			margin-bottom: 1.5rem;
+			.logo { width: 64px; margin-bottom: 0.75rem; }
+			h1 { font-size: 1.4rem; font-weight: 700; color: var(--fs-text); }
+			p { color: var(--fs-muted); margin-top: 0.15rem; }
+		}
+		.login-actions { margin-top: 1.25rem; }
+		.fs-sso-msg { text-align: center; color: var(--fs-muted); line-height: 1.5; }
+		.fs-host-row { display: flex; gap: 0.75rem; .fs-host { flex: 1 1 auto; } .fs-port { flex: 0 0 5.5rem; } }
+		.select select { width: 100%; }
+	}
+}
+
+// ---- content width -----------------------------------------------------
+// Stock FileGator stops at ~1100px. Here the cap is --fs-max-width (config: max_width) and it shrinks with the window.
+// Embedded in another page (an ISPConfig tab, an iframe) there is no cap: it fills whatever frame it is given.
+#wrapper {
+	.container { width: 100%; max-width: var(--fs-max-width); margin-left: auto; margin-right: auto; }
+	.container .container { padding: 0; } // stock pads both the outer and the inner container on small screens
+}
+html.is-embedded {
+	--fs-max-width: none;
+
+	// breathing room between the frame's edge and the file manager (an iframe edge is otherwise flush with the content)
+	#wrapper #inner { padding: 16px 20px 24px; box-sizing: border-box; }
+	#wrapper #browser { margin-top: 14px; margin-bottom: 28px; }
+
+	// plenty of room in a panel tab: show the top bar's items inline instead of behind a menu button
+	#wrapper .navbar { display: flex; align-items: center; justify-content: space-between; } // Bulma only makes this a row from desktop width up
+	#wrapper .navbar-brand { flex: 0 0 auto; }
+	// the name and the website chip are labels here, not links (the panel decides who is signed in, and the tab is the way home)
+	#wrapper .navbar-item.logo, #wrapper .navbar-item.profile { pointer-events: none; cursor: default; &:hover, &:focus { background: transparent; color: inherit; } }
+	#wrapper .navbar-burger { display: none; }
+	#wrapper .navbar-menu { display: flex !important; align-items: center; flex: 1 1 auto; margin-left: auto; padding: 0; background: transparent; box-shadow: none; border-radius: 0; }
+	#wrapper .navbar-end { display: flex; flex-direction: row; align-items: center; margin-left: auto; }
+}
+@media all and (max-width: 520px) {
+	// a really narrow frame (a phone): back to a compact bar, and less padding
+	html.is-embedded #wrapper #inner { padding: 10px 10px 20px; }
+	html.is-embedded #wrapper .navbar-menu .profile { display: none; }
+}
+
+// ---- theme switch ------------------------------------------------------
+#wrapper .fs-theme-toggle {
+	display: inline-flex; align-items: center; justify-content: center;
+	align-self: center; // the navbar row stretches its items: a fixed-height button must be centred, not pinned to the top
+	width: 2.2rem; height: 2.2rem; padding: 0; line-height: 1; border-radius: 8px; cursor: pointer;
+	color: var(--fs-muted);
+	&:hover { background: var(--fs-accent-soft); color: var(--fs-accent); }
+	&.navbar-item { padding: 0; margin: 0 0.35rem; }
+	.icon { width: 1.25rem; height: 1.25rem; margin: 0; }
+}
+#wrapper .fs-theme-floating {
+	position: fixed; top: 14px; right: 14px; z-index: 20;
+	background: var(--fs-surface); border: 1px solid var(--fs-border); box-shadow: var(--fs-shadow);
+}
+
+// ---- stock dark-theme rules, now driven by the same variables so light and dark share them ----
+#wrapper {
+	.label, .modal-card-title, .checkbox, .radio, strong, .content h1, .content h2 { color: var(--fs-text); }
+	.file-row a, .node-tree > a { color: var(--fs-text) !important; }
+	.is-current-sort { border-bottom: 1px solid var(--fs-accent) !important; }
+	a:hover, .breadcrumb a:hover { color: var(--fs-accent); }
+	.input::placeholder, .textarea::placeholder { color: var(--fs-muted); opacity: 0.8; }
+	.input:hover, .select select:hover { border-color: var(--fs-accent); }
+	.select:not(.is-multiple):not(.is-loading)::after { border-color: var(--fs-accent); }
+	.select select { background: var(--fs-surface-2); border-color: var(--fs-border); color: var(--fs-text); }
+
+	.button:not(.is-primary):not(.is-danger) {
+		background: var(--fs-surface); border-color: var(--fs-border); color: var(--fs-text);
+		&:hover, &:focus { border-color: var(--fs-accent); color: var(--fs-accent); }
+		&:active { color: var(--fs-accent); }
+	}
+	.button.is-danger { color: #fff; }
+
+	// phone menu (burger): Bulma paints it white
+	.navbar-menu { background: var(--fs-surface); }
+}
+
+// ---- modals and dialogs --------------------------------------------------
+// Buefy mounts every modal / confirm / prompt at the end of <body>, OUTSIDE #wrapper, so the #wrapper rules above do not
+// reach them. They need their own copy, keyed on .modal.
+.modal {
+	color: var(--fs-text);
+
+	.box, .modal-card-body, .modal-card-head, .modal-card-foot { background: var(--fs-surface); color: var(--fs-text); }
+	.modal-card { border-radius: var(--fs-radius); overflow: hidden; box-shadow: var(--fs-shadow); }
+	.modal-card-head, .modal-card-foot { border-color: var(--fs-border); }
+	.modal-card-title, .label, .checkbox, .radio, strong { color: var(--fs-text); }
+	a { color: var(--fs-accent); }
+	.node-tree > a { color: var(--fs-text) !important; }
+	.help:not(.is-danger) { color: var(--fs-muted); }
+
+	.input, .textarea, .select select {
+		background: var(--fs-surface-2); border-color: var(--fs-border); color: var(--fs-text); border-radius: 8px; box-shadow: none;
+		&:hover { border-color: var(--fs-accent); }
+		&:focus { border-color: var(--fs-accent); box-shadow: 0 0 0 3px var(--fs-accent-soft); }
+	}
+	.input::placeholder, .textarea::placeholder { color: var(--fs-muted); opacity: 0.8; }
+
+	.button { border-radius: 8px; font-weight: 500; }
+	.button:not(.is-primary):not(.is-danger) {
+		background: var(--fs-surface); border-color: var(--fs-border); color: var(--fs-text);
+		&:hover, &:focus { border-color: var(--fs-accent); color: var(--fs-accent); }
+	}
+	.button.is-primary { background: var(--fs-accent); border-color: transparent; color: #fff; &:hover { filter: brightness(1.08); } }
+	.button.is-danger { color: #fff; }
+}
+// toasts ("Updated", "Downloaded") are body-level too
+.toast { box-shadow: var(--fs-shadow); }
+
+@media all and (max-width: 1087px) {
+	#wrapper .navbar-menu { border-radius: 0 0 var(--fs-radius) var(--fs-radius); box-shadow: var(--fs-shadow); padding: 0.5rem; }
+}
+
+@media all and (max-width: 768px) {
+	#wrapper .fs-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}

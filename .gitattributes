@@ -1,0 +1,13 @@
+# Everything is LF: the scripts run on Linux and the front-end build's lint rule rejects CRLF
+* text=auto eol=lf
+*.sh text eol=lf
+*.php text eol=lf
+*.tpl text eol=lf
+*.js text eol=lf
+*.vue text eol=lf
+*.scss text eol=lf
+*.md text eol=lf
+*.png binary
+*.ico binary
+*.gif binary
+*.tar.gz binary

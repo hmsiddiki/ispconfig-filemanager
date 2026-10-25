@@ -1,0 +1,15 @@
+# built or installed, never committed
+node_modules/
+vendor/
+dist/
+release/
+*.log
+.DS_Store
+Thumbs.db
+
+# local configuration and secrets
+/configuration.php
+private/
+repository/
+.env.local
+*.key

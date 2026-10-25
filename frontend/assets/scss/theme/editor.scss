@@ -1,0 +1,113 @@
+// CodeMirror theme "fs": follows the same light/dark variables as the rest of the interface.
+
+:root {
+	--cm-bg: var(--fs-surface-2, #f8f9fb);
+	--cm-fg: #2b3040;
+	--cm-gutter: var(--fs-surface, #fff);
+	--cm-gutter-fg: #9aa1b2;
+	--cm-line: rgba(63, 106, 216, 0.07);
+	--cm-select: rgba(63, 106, 216, 0.22);
+	--cm-cursor: #2b3040;
+	--cm-comment: #8a93a6;
+	--cm-keyword: #a626a4;
+	--cm-string: #2f8f4e;
+	--cm-number: #c2410c;
+	--cm-def: #1d4ed8;
+	--cm-variable: #2b3040;
+	--cm-property: #0f7da8;
+	--cm-tag: #d1344b;
+	--cm-attr: #b45309;
+	--cm-meta: #6b7280;
+	--cm-builtin: #0e7490;
+	--cm-match: rgba(232, 163, 23, 0.35);
+}
+
+// same two routes to dark as the rest of the interface (see modern.scss): chosen with data-theme, or no choice + OS dark
+@mixin cm-dark-vars {
+	--cm-bg: #181b21;
+	--cm-fg: #dfe3ec;
+	--cm-gutter: #1c1f26;
+	--cm-gutter-fg: #5d6577;
+	--cm-line: rgba(107, 140, 240, 0.09);
+	--cm-select: rgba(107, 140, 240, 0.32);
+	--cm-cursor: #e6e8ee;
+	--cm-comment: #6f7a90;
+	--cm-keyword: #c792ea;
+	--cm-string: #98c379;
+	--cm-number: #f78c6c;
+	--cm-def: #82aaff;
+	--cm-variable: #dfe3ec;
+	--cm-property: #7fd6e8;
+	--cm-tag: #f07178;
+	--cm-attr: #ffcb6b;
+	--cm-meta: #8f9bb3;
+	--cm-builtin: #6bd4d4;
+	--cm-match: rgba(255, 203, 107, 0.3);
+}
+
+:root[data-theme="dark"] {
+	@include cm-dark-vars;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]):not([data-theme="dark"]) {
+		@include cm-dark-vars;
+	}
+}
+
+.cm-s-fs.CodeMirror {
+	background: var(--cm-bg);
+	color: var(--cm-fg);
+}
+.cm-s-fs .CodeMirror-gutters { background: var(--cm-gutter); border-right: 1px solid rgba(127, 127, 127, 0.18); }
+.cm-s-fs .CodeMirror-linenumber { color: var(--cm-gutter-fg); }
+.cm-s-fs .CodeMirror-cursor { border-left: 2px solid var(--cm-cursor); }
+.cm-s-fs .CodeMirror-activeline-background { background: var(--cm-line); }
+.cm-s-fs div.CodeMirror-selected, .cm-s-fs .CodeMirror-focused .CodeMirror-selected { background: var(--cm-select); }
+.cm-s-fs .CodeMirror-line::selection, .cm-s-fs .CodeMirror-line > span::selection, .cm-s-fs .CodeMirror-line > span > span::selection { background: var(--cm-select); }
+.cm-s-fs .CodeMirror-matchingbracket { background: var(--cm-match); color: inherit !important; outline: 1px solid rgba(232, 163, 23, 0.6); }
+.cm-s-fs .CodeMirror-nonmatchingbracket { color: var(--cm-tag); }
+.cm-s-fs .CodeMirror-foldmarker { color: var(--cm-meta); text-shadow: none; font-family: inherit; }
+.cm-s-fs .CodeMirror-foldgutter-open, .cm-s-fs .CodeMirror-foldgutter-folded { color: var(--cm-gutter-fg); }
+.cm-s-fs .cm-searching { background: var(--cm-match); }
+
+.cm-s-fs .cm-comment { color: var(--cm-comment); font-style: italic; }
+.cm-s-fs .cm-keyword, .cm-s-fs .cm-atom { color: var(--cm-keyword); }
+.cm-s-fs .cm-string, .cm-s-fs .cm-string-2 { color: var(--cm-string); }
+.cm-s-fs .cm-number { color: var(--cm-number); }
+.cm-s-fs .cm-def { color: var(--cm-def); }
+.cm-s-fs .cm-variable, .cm-s-fs .cm-operator, .cm-s-fs .cm-punctuation { color: var(--cm-variable); }
+.cm-s-fs .cm-variable-2, .cm-s-fs .cm-variable-3, .cm-s-fs .cm-type { color: var(--cm-builtin); }
+.cm-s-fs .cm-property { color: var(--cm-property); }
+.cm-s-fs .cm-tag { color: var(--cm-tag); }
+.cm-s-fs .cm-attribute, .cm-s-fs .cm-qualifier { color: var(--cm-attr); }
+.cm-s-fs .cm-builtin { color: var(--cm-builtin); }
+.cm-s-fs .cm-meta, .cm-s-fs .cm-bracket { color: var(--cm-meta); }
+.cm-s-fs .cm-header { color: var(--cm-def); font-weight: 700; }
+.cm-s-fs .cm-link { color: var(--cm-property); text-decoration: underline; }
+.cm-s-fs .cm-strong { font-weight: 700; }
+.cm-s-fs .cm-em { font-style: italic; }
+.cm-s-fs .cm-error { color: var(--cm-tag); }
+
+// search / replace / jump-to-line bar (CodeMirror's dialog addon)
+.cm-s-fs .CodeMirror-dialog {
+	background-color: var(--fs-surface, #fff);
+	opacity: 1;
+	background: var(--fs-surface, #fff);
+	color: var(--fs-text, #2b3040);
+	border-bottom: 1px solid var(--fs-border, #e3e6eb);
+	padding: 0.4rem 0.75rem;
+	font-size: 0.85rem;
+	z-index: 5;
+}
+.cm-s-fs .CodeMirror-dialog input {
+	background: var(--fs-surface-2, #f8f9fb);
+	color: inherit;
+	border: 1px solid var(--fs-border, #e3e6eb);
+	border-radius: 6px;
+	padding: 0.2rem 0.5rem;
+	font-family: inherit;
+	outline: none;
+	min-width: 12rem;
+}
+.cm-s-fs .CodeMirror-dialog input:focus { border-color: var(--fs-accent, #3f6ad8); }
+.cm-s-fs .CodeMirror-dialog button { margin-left: 0.4rem; }
