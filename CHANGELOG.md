@@ -2,7 +2,7 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.2.0
 
 - **Unzip runs in the background:** "Unzip" now answers at once and the server does the work in a process of its own, so reloading the page, closing the tab or a proxy timeout no longer stops it (a large zip used to hang the page and die half-way). A progress card (reading the archive, then "n / m files") shows it, with a Cancel button, and finds the job again after a reload. Files are extracted straight from the archive, the temporary copy is always removed, and names that point outside the target folder are skipped.
 - **tar, tar.gz, tgz, tar.bz2 and tar.xz** can be unpacked too (needs the `tar` program on the server, which every Linux has).
