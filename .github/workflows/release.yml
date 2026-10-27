@@ -29,12 +29,14 @@ jobs:
           node-version: '18'
           cache: npm
 
+      - name: PHP libraries (the tests load them)
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
       - name: Tests
         run: ./tests/run.sh
 
       - name: Build
         run: |
-          composer install --no-dev --optimize-autoloader --no-interaction
           npm ci --ignore-scripts
           NODE_OPTIONS=--openssl-legacy-provider npm run build
           ./scripts/build-package.sh

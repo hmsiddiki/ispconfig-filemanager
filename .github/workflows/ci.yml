@@ -36,6 +36,9 @@ jobs:
       - name: JavaScript syntax (panel tab script)
         run: node --check installer/panel/filemanager-tab.js
 
+      - name: PHP libraries (the tests load them)
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
       - name: PHP tests
         run: ./tests/run.sh
 
@@ -45,6 +48,4 @@ jobs:
           NODE_OPTIONS=--openssl-legacy-provider npm run build
 
       - name: Release package builds
-        run: |
-          composer install --no-dev --optimize-autoloader --no-interaction
-          ./scripts/build-package.sh
+        run: ./scripts/build-package.sh
