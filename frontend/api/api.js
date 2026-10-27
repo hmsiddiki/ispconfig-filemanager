@@ -245,6 +245,30 @@ const api = {
         .catch(error => reject(error))
     })
   },
+  startUnzip (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('unzipjob', {
+        item: params.item,
+        destination: params.destination,
+      })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
+  unzipStatus (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('unzipjob/status', { dismiss: params.dismiss || [] })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
+  unzipCancel (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('unzipjob/cancel', { id: params.id })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
   urlCancel (params) {
     return new Promise((resolve, reject) => {
       axios.post('fetchurl/cancel', { id: params.id })

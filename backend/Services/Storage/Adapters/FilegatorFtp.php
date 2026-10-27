@@ -15,6 +15,26 @@ use League\Flysystem\NotSupportedException;
 
 class FilegatorFtp extends Ftp
 {
+    /** @var array<string, true> folders this connection has already found or made: asking again costs a round trip per file */
+    protected $known_dirs = [];
+
+    public function ensureDirectory($dirname)
+    {
+        if (isset($this->known_dirs[$dirname])) {
+            return;
+        }
+        parent::ensureDirectory($dirname);
+        $this->known_dirs[$dirname] = true;
+    }
+
+    public function deleteDir($dirname)
+    {
+        $this->known_dirs = [];
+
+        return parent::deleteDir($dirname);
+    }
+
+
     /**
      * Normalize a file entry.
      *

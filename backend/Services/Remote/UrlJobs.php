@@ -66,7 +66,15 @@ class UrlJobs
     public function write(string $id, array $state): void
     {
         $state['updated'] = time();
-        @file_put_contents($this->path($id, 'json'), json_encode($state), LOCK_EX);
+        $path = $this->path($id, 'json');
+        // written to a side file and renamed over the real one: file_put_contents() empties the file first, and a poll that arrives at that
+        // moment would read nothing (the job would seem to have vanished)
+        $tmp = $path . '.' . bin2hex(random_bytes(3)) . '.tmp';
+        if (@file_put_contents($tmp, json_encode($state)) !== false && @rename($tmp, $path)) {
+            return;
+        }
+        @unlink($tmp);
+        @file_put_contents($path, json_encode($state), LOCK_EX);   // where rename over an open file is refused (Windows)
     }
 
     public function read(string $id): ?array
@@ -97,6 +105,61 @@ class UrlJobs
     public function cancelRequested(string $id): bool
     {
         return is_file($this->path($id, 'cancel'));
+    }
+
+    /**
+     * Every job of this user that still has a status file, newest first: [id => state array].
+     *
+     * @return array<string, array>
+     */
+    public function all(): array
+    {
+        $out = [];
+        $prefix = $this->dir . DIRECTORY_SEPARATOR . 'job-' . $this->user_key . '-';
+        foreach (glob($prefix . '*.json') ?: [] as $file) {
+            $id = substr(basename($file), strlen('job-' . $this->user_key . '-'), 24);
+            $state = self::validId($id) ? $this->read($id) : null;
+            if ($state !== null) {
+                $out[$id] = $state;
+            }
+        }
+        uasort($out, static function ($a, $b) {
+            return ($b['started'] ?? 0) <=> ($a['started'] ?? 0);
+        });
+
+        return $out;
+    }
+
+    /** Drop every file of one job (status, cancel flag, handover). */
+    public function forget(string $id): void
+    {
+        if (self::validId($id)) {
+            foreach (['json', 'cancel', 'payload'] as $ext) {
+                @unlink($this->path($id, $ext));
+            }
+        }
+    }
+
+    /** Hand a worker process what it needs. The file is private to the panel user and the worker deletes it as soon as it has read it. */
+    public function putPayload(string $id, array $payload): string
+    {
+        $path = $this->path($id, 'payload');
+        if (@file_put_contents($path, json_encode($payload), LOCK_EX) === false) {
+            throw new \RuntimeException('Cannot write the job file');
+        }
+        @chmod($path, 0600);
+
+        return $path;
+    }
+
+    public function takePayload(string $id): ?array
+    {
+        $path = $this->path($id, 'payload');
+        $raw = @file_get_contents($path);
+        @unlink($path);
+        $data = $raw === false ? null : json_decode($raw, true);
+
+        return is_array($data) ? $data : null;
     }
 
     /** Remove status files nobody will read any more. */

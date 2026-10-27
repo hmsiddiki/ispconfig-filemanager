@@ -23,6 +23,13 @@ curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/mai
 ```
 
 It downloads the latest release, **verifies its checksum**, checks your server, installs, and tests itself.
+
+If your ISPConfig panel is not on port 8080 (for example it runs on 2087), pass the port. The `-s --` is required: it hands the flag to the installer instead of to bash.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash -s -- --panel-port 2087
+```
+
 To only look first: add `-s -- --check` (`... | sudo bash -s -- --check`), which changes nothing.
 
 Prefer to read before you run? Download `ispconfig-filemanager-X.Y.Z.tar.gz` from the
@@ -141,7 +148,8 @@ Edit `/usr/local/ispconfig/filemanager/configuration.php` (changes apply immedia
 | `frontend_config.max_width` | widest the content gets, in px (an embedded file manager always fills its frame) |
 | `url_upload.enabled` / `max_size` / `timeout` | "Upload from URL": on/off, size limit per file (default 200 MB), time limit |
 | `url_upload.max_concurrent_per_user` / `max_concurrent_total` | downloads at once (default 1 per person, 3 on the server) |
-| `frontend_config.upload_max_size` | upload size limit shown to the browser (default 100 MB) |
+| `unzip_php_cli` | optional: full path of the command-line PHP used for the background unzip worker (default: found next to the PHP the panel runs on) |
+| `frontend_config.upload_max_size` | upload size limit per file, checked in the browser and again on the server (default 2 GB; uploads are sent in chunks, so PHP's `upload_max_filesize` does not apply) |
 | `frontend_config.editable` | file types that open in the code editor |
 
 The session length (default 8 hours) is set at install time with `--ttl-hours`; re-run the installer to change it.
@@ -176,7 +184,7 @@ or open the app with `?theme=dark` / `?theme=light` (valid values: `light`, `dar
 | "The file manager is not set up correctly: its data folder is not writable" | `/usr/local/ispconfig/interface/temp/filemanager` must be owned by the panel user (`chown -R ispconfig:ispconfig …`), or the panel's PHP service has a different sandbox (see above) |
 | "This login link has expired / was already used" | open the file manager again from the panel (links work once, for 60 seconds) |
 | "Could not open the website folder" | Pure-FTPd refused the temporary account: check the FTP service and that `ftp_user` has the `expires` column |
-| Panel not on port 8080 | pass `--panel-port` to the installer |
+| Installer stops with "the panel did not serve the file manager (HTTP 000)": panel not on port 8080 | pass `--panel-port`, e.g. `curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh \| sudo bash -s -- --panel-port 2087` |
 | A client sees no websites | they have none, or none that is an active "vhost" website on this server |
 | Logs | `/usr/local/ispconfig/interface/temp/filemanager/logs/app.log` and ISPConfig's own log (Monitor → Logs) |
 

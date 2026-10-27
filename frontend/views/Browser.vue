@@ -8,6 +8,9 @@
 
     <Upload v-if="can('upload')" v-show="dropZone == false" :files="files" :drop-zone="dropZone" />
 
+    <!-- the unzip runs on the server in the background: this shows it, also after a page reload -->
+    <UnzipJobs v-if="can(['write', 'zip'])" ref="unzipJobs" @finished="loadFiles" />
+
     <b-upload v-if="dropZone && ! isLoading" multiple drag-drop>
       <b class="drop-info">{{ lang('Drop files to upload') }}</b>
     </b-upload>
@@ -248,6 +251,7 @@ import Search from './partials/Search'
 import Pagination from './partials/Pagination'
 import Upload from './partials/Upload'
 import UrlUpload from './partials/UrlUpload'
+import UnzipJobs from './partials/UnzipJobs'
 import api from '../api/api'
 import VueClipboard from 'vue-clipboard2'
 import _ from 'lodash'
@@ -256,7 +260,7 @@ Vue.use(VueClipboard)
 
 export default {
   name: 'Browser',
-  components: { Menu, Pagination, Upload },
+  components: { Menu, Pagination, Upload, UnzipJobs },
   data() {
     return {
       dropZone: false,
@@ -710,7 +714,7 @@ export default {
       })
     },
     isArchive(item) {
-      return item.type == 'file' && item.name.split('.').pop() == 'zip'
+      return item.type == 'file' && /\.(zip|tar|tar\.gz|tgz|tar\.bz2|tbz2|tbz|tar\.xz|txz)$/i.test(item.name)
     },
     unzip(event, item) {
       this.$dialog.confirm({
@@ -719,19 +723,15 @@ export default {
         cancelText: this.lang('Cancel'),
         confirmText: this.lang('Unzip'),
         onConfirm: () => {
-          this.isLoading = true
-          api.unzipItem({
+          // the server unzips in the background and answers at once: a reload or a closed page does not stop it
+          api.startUnzip({
             item: item.path,
             destination: this.$store.state.cwd.location,
           })
             .then(() => {
-              this.isLoading = false
-              this.loadFiles()
+              if (this.$refs.unzipJobs) this.$refs.unzipJobs.refresh()
             })
-            .catch(error => {
-              this.isLoading = false
-              this.handleError(error)
-            })
+            .catch(error => this.handleError(error))
           this.checked = []
         }
       })

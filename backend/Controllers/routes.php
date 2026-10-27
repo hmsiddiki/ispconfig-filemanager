@@ -321,4 +321,37 @@ return [
             'read', 'upload',
         ],
     ],
+    [
+        'route' => [
+            'POST', '/unzipjob', '\Filegator\Controllers\UnzipJobController@start',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write', 'zip',
+        ],
+    ],
+    [
+        'route' => [
+            'POST', '/unzipjob/status', '\Filegator\Controllers\UnzipJobController@status',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write', 'zip',
+        ],
+    ],
+    [
+        'route' => [
+            'POST', '/unzipjob/cancel', '\Filegator\Controllers\UnzipJobController@cancel',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write', 'zip',
+        ],
+    ],
 ];

@@ -24,7 +24,7 @@ $app->auth->check_module_permissions('sites');
 const FM_HOME = '@FM_HOME@';
 const FM_APP_URL = '@FM_APP_URL@';          // where the file manager answers, on this same address
 const FM_ACCOUNT_TTL = @FM_ACCOUNT_TTL@;    // seconds a temporary FTP account lives
-const FM_MAX_OPEN_PER_SITE = 20;            // temporary accounts alive at once for one website
+const FM_MAX_OPEN_PER_SITE = 100;           // temporary accounts alive at once for one website
 const FM_MARK = 'filegator-temp';           // written in the account's user_config: how clean-up finds only ours
 
 require_once FM_HOME . '/backend/Services/Remote/SsoToken.php';
@@ -51,8 +51,11 @@ function fm_create_account(array $site)
     $app->db->query("DELETE FROM ftp_user WHERE user_config = ? AND expires < DATE_SUB(NOW(), INTERVAL 1 HOUR)", FM_MARK);
 
     $open = $app->db->queryOneRecord("SELECT COUNT(*) AS c FROM ftp_user WHERE user_config = ? AND parent_domain_id = ? AND expires > NOW()", FM_MARK, $site['domain_id']);
+    // Every opening (a reload too) makes a login that lives for hours, so a busy day can reach the cap with nobody doing anything wrong.
+    // At the cap the oldest ones are retired to make room (with some spare, so this is not repeated on every opening).
     if ((int) $open['c'] >= FM_MAX_OPEN_PER_SITE) {
-        throw new RuntimeException('Too many file manager sessions are open for this website. Close one, or try again later.');
+        $retire = (int) $open['c'] - FM_MAX_OPEN_PER_SITE + 10;
+        $app->db->query("DELETE FROM ftp_user WHERE user_config = ? AND parent_domain_id = ? ORDER BY expires ASC LIMIT " . $retire, FM_MARK, $site['domain_id']);
     }
 
     // numeric ids of the website's system user: files must be created as that user, never as root

@@ -2,6 +2,16 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- **Unzip runs in the background:** "Unzip" now answers at once and the server does the work in a process of its own, so reloading the page, closing the tab or a proxy timeout no longer stops it (a large zip used to hang the page and die half-way). A progress card (reading the archive, then "n / m files") shows it, with a Cancel button, and finds the job again after a reload. Files are extracted straight from the archive, the temporary copy is always removed, and names that point outside the target folder are skipped.
+- **tar, tar.gz, tgz, tar.bz2 and tar.xz** can be unpacked too (needs the `tar` program on the server, which every Linux has).
+- **Default upload limit is 2 GB** (was 100 MB) in new installs. An update keeps your `configuration.php`; to raise an existing install, change `frontend_config.upload_max_size`.
+- Unzip is about 20 times faster over FTP: files going into folders the unzip itself created are written without asking the server whether the name is taken, and the FTP connection remembers folders it already knows. (A 13,000-file site took about a minute instead of 22.)
+- Job status files are written atomically, so a progress poll can no longer read a half-written file; the progress card also keeps following a job through a missed answer.
+- Panel: opening the file manager no longer fails with "Too many file manager sessions" after many reloads. The cap is now 100 per website, and at the cap the oldest temporary logins are retired to make room.
+- Optional setting `unzip_php_cli` (full path of the command-line PHP) for servers where it is not found automatically.
+
 ## 1.1.0
 
 - **Drag and drop to move:** drag files or folders (or everything selected) onto a folder, or onto the ".." card to move up a level. Works in grid and list views.

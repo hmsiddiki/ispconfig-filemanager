@@ -34,7 +34,7 @@ return [
         'app_version' => APP_VERSION,
         'language' => 'english',
         'logo' => 'logo.svg',
-        'upload_max_size' => 100 * 1024 * 1024,
+        'upload_max_size' => 2048 * 1024 * 1024,
         'upload_chunk_size' => 1 * 1024 * 1024, // must stay below the panel's client_max_body_size (20M by default)
         'upload_simultaneous' => 3,
         'default_archive_name' => 'archive.zip',

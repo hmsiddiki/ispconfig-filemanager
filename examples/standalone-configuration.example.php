@@ -26,7 +26,7 @@ return [
         'app_version' => APP_VERSION,
         'language' => 'english',
         'logo' => 'logo.svg',
-        'upload_max_size' => 100 * 1024 * 1024, // 100MB
+        'upload_max_size' => 2048 * 1024 * 1024, // 2GB per file (uploads are sent in chunks, so PHP's upload_max_filesize does not limit this)
         'upload_chunk_size' => 1 * 1024 * 1024, // 1MB
         'upload_simultaneous' => 3,
         'default_archive_name' => 'archive.zip',

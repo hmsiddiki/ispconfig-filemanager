@@ -11,6 +11,7 @@
 namespace Filegator\Services\Storage;
 
 use Filegator\Services\Service;
+use League\Flysystem\Config;
 use League\Flysystem\Filesystem as Flysystem;
 use League\Flysystem\Util;
 
@@ -176,6 +177,18 @@ class Filesystem implements Service
         }
 
         return $this->storage->putStream($destination, $resource);
+    }
+
+    /**
+     * Store a file that is known not to exist yet (for example inside a folder that was just created), without looking for a clash first.
+     * store() asks the storage whether the name is taken, and Flysystem asks again: over FTP each of those questions is a directory listing.
+     * An existing file with this name would be overwritten, so only use it where that cannot happen.
+     */
+    public function storeNew(string $path, string $name, $resource): bool
+    {
+        $destination = Util::normalizePath($this->joinPaths($this->applyPathPrefix($path), $name));
+
+        return (bool) $this->storage->getAdapter()->writeStream($destination, $resource, new Config());
     }
 
     /**
