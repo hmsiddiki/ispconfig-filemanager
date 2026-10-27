@@ -163,6 +163,12 @@ if [ ! -f "$FM_HOME/configuration.php" ]; then
     ok "configuration written ($FM_HOME/configuration.php)"
 else
     ok "existing configuration kept"
+    # The upload limit used to ship as 100 MB. An install that still has exactly that shipped value gets the new 2 GB default; any value the
+    # administrator chose themselves is a different line and is left alone.
+    if grep -q "'upload_max_size' => 100 \* 1024 \* 1024," "$FM_HOME/configuration.php"; then
+        sed -i "s/\('upload_max_size' => \)100 \* 1024 \* 1024,/\12048 * 1024 * 1024,/" "$FM_HOME/configuration.php"
+        ok "upload limit raised from the old 100 MB default to the new 2 GB default (a value you set yourself is never changed)"
+    fi
 fi
 
 sed -e "s|@FM_HOME@|$FM_HOME|g" -e "s|@FM_DATA@|$FM_DATA|g" "$PKG/app/index.php.tpl" > "$WEB_DIR/app/index.php"

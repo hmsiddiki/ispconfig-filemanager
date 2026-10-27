@@ -2,6 +2,12 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.2.1
+
+- **Updating raises the old upload default.** The 2 GB upload default from 1.2.0 only reached new installs, because an update keeps `configuration.php`. The installer now changes `upload_max_size` to 2 GB when it still holds the old shipped value (exactly 100 MB); a value you set yourself is never changed.
+- README: step-by-step instructions for updating a server.
+- CI: the PHP libraries are installed before the tests run.
+
 ## 1.2.0
 
 - **Unzip runs in the background:** "Unzip" now answers at once and the server does the work in a process of its own, so reloading the page, closing the tab or a proxy timeout no longer stops it (a large zip used to hang the page and die half-way). A progress card (reading the archive, then "n / m files") shows it, with a Cancel button, and finds the job again after a reload. Files are extracted straight from the archive, the temporary copy is always removed, and names that point outside the target folder are skipped.

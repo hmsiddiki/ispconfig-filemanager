@@ -71,7 +71,7 @@ If your panel is not on port 8080, add `--panel-port 2087` (your port) the same 
 **What an update does**
 
 - Replaces the program files, the front end, the panel page and the clean-up script.
-- **Keeps** your `configuration.php` and your keys. Nothing you configured is lost, so there is nothing to back up first.
+- **Keeps** your `configuration.php` and your keys. Nothing you configured is lost, so there is nothing to back up first. (The one exception is the old 100 MB upload default, which is raised to 2 GB; see below.)
 - Checks the download against its checksum and runs the same self-tests as a fresh install; if a test fails, nothing is switched on.
 - People who have the file manager open may need to reopen it from the panel (it gets a new temporary login).
 
@@ -80,14 +80,9 @@ If your panel is not on port 8080, add `--panel-port 2087` (your port) the same 
 1. Open a website's **File Manager** tab: it should load and show the files.
 2. Press **Ctrl+F5** once in your browser, so it loads the new front end instead of a cached one.
 
-**Settings an update does not change.** Because your `configuration.php` is kept, a server that is already installed keeps its old values; only new installs get the new defaults. To use a new default, edit `/usr/local/ispconfig/filemanager/configuration.php` by hand:
+**Upload limit.** The default upload limit is now **2 GB** (it was 100 MB). When you update, a server that still has the old 100 MB default is raised to 2 GB automatically, and the installer says so. A value you set yourself (anything other than the old default) is never changed. To choose another limit, edit `frontend_config.upload_max_size` in `/usr/local/ispconfig/filemanager/configuration.php`, for example `500 * 1024 * 1024`; it takes effect on the next request, there is nothing to restart.
 
-| Setting | New default | What to do on an existing server |
-|---|---|---|
-| `frontend_config.upload_max_size` | 2 GB (was 100 MB) | set it to `2048 * 1024 * 1024` to allow files up to 2 GB |
-| `unzip_php_cli` | found automatically | only if Unzip says it cannot start: add the full path of the command-line PHP, for example `'unzip_php_cli' => '/usr/bin/php',` |
-
-A change to `configuration.php` takes effect on the next request; there is nothing to restart.
+**Other settings** are not touched by an update, because your `configuration.php` is kept. The only new optional one is `unzip_php_cli`: if Unzip says it cannot start, add the full path of the command-line PHP, for example `'unzip_php_cli' => '/usr/bin/php',`.
 
 **Needed since 1.2.0.** The background Unzip uses the command-line PHP and, for `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2` and `.tar.xz`, the `tar` program. Standard ISPConfig servers have both. `.zip` needs the PHP `zip` extension, which is already required (see below).
 
