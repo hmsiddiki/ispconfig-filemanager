@@ -44,6 +44,55 @@ sudo ./install.sh             # installs
 Then open the panel: open a website (**Sites → Website → click the website**) and click its **File Manager** tab.
 (With `--with-menu`, also **Sites → File Manager** in the side menu.)
 
+## Updating to a new release
+
+Run the installer again on each server, as root. It sees the existing install and updates it in place.
+
+**1. Look first** (changes nothing):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash -s -- --check
+```
+
+**2. Update:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash
+```
+
+This installs the **latest release**. To install one particular version instead (this is also how you go back to an older one):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash -s -- --version 1.2.0
+```
+
+If your panel is not on port 8080, add `--panel-port 2087` (your port) the same way as in the install command above.
+
+**What an update does**
+
+- Replaces the program files, the front end, the panel page and the clean-up script.
+- **Keeps** your `configuration.php` and your keys. Nothing you configured is lost, so there is nothing to back up first.
+- Checks the download against its checksum and runs the same self-tests as a fresh install; if a test fails, nothing is switched on.
+- People who have the file manager open may need to reopen it from the panel (it gets a new temporary login).
+
+**After updating, check**
+
+1. Open a website's **File Manager** tab: it should load and show the files.
+2. Press **Ctrl+F5** once in your browser, so it loads the new front end instead of a cached one.
+
+**Settings an update does not change.** Because your `configuration.php` is kept, a server that is already installed keeps its old values; only new installs get the new defaults. To use a new default, edit `/usr/local/ispconfig/filemanager/configuration.php` by hand:
+
+| Setting | New default | What to do on an existing server |
+|---|---|---|
+| `frontend_config.upload_max_size` | 2 GB (was 100 MB) | set it to `2048 * 1024 * 1024` to allow files up to 2 GB |
+| `unzip_php_cli` | found automatically | only if Unzip says it cannot start: add the full path of the command-line PHP, for example `'unzip_php_cli' => '/usr/bin/php',` |
+
+A change to `configuration.php` takes effect on the next request; there is nothing to restart.
+
+**Needed since 1.2.0.** The background Unzip uses the command-line PHP and, for `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2` and `.tar.xz`, the `tar` program. Standard ISPConfig servers have both. `.zip` needs the PHP `zip` extension, which is already required (see below).
+
+**If something goes wrong,** install the previous version again with `--version` (for example `--version 1.1.0`). Your configuration is kept in that direction too.
+
 ## What you need
 
 | | |
@@ -80,7 +129,7 @@ passes does it add the menu entry, the tab and the clean-up job. If a step fails
 --check             only check, change nothing
 ```
 
-**Update:** run the installer again with the newer release. Program files are replaced; your `configuration.php` and keys are kept.
+**Update:** see [Updating to a new release](#updating-to-a-new-release) above.
 
 **Uninstall:** `sudo ispconfig-filemanager-uninstall` (the installer puts this command in `/usr/local/sbin`, owned by root; it asks first, `--yes` skips the question). It removes the file manager, its menu entry,
 tab, cron job and every temporary FTP account it made. ISPConfig, your websites and their files are not touched.
