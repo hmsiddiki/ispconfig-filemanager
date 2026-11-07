@@ -23,6 +23,9 @@ class IspconfigAuth extends RemoteAuth
 
     protected $ftp_port = 21;
 
+    /** folder the panel asked to open (a vhost subdomain's own folder), set by loginWithToken() */
+    protected $start_folder = null;
+
     public function init(array $config = [])
     {
         parent::init($config);
@@ -82,7 +85,17 @@ class IspconfigAuth extends RemoteAuth
         $this->session->set('current_path', '/');
         $this->session->migrate(true);
 
+        // the panel names a folder when the tab belongs to a subdomain or alias of the website (the token is signed by the panel)
+        $start = trim(str_replace('\\', '/', (string) ($payload['start'] ?? '')), '/');
+        $this->start_folder = $start !== '' && strpos('/' . $start . '/', '/../') === false && ! preg_match('/[\x00-\x1f]/', $start) ? $start : null;
+
         return true;
+    }
+
+    /** The folder the panel asked to open, or null to use the configured default. */
+    public function startFolder(): ?string
+    {
+        return $this->start_folder;
     }
 
     public function user(): ?User

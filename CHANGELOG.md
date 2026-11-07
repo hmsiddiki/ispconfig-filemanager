@@ -2,6 +2,10 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.4.1
+
+- **The File Manager tab works on vhost subdomains and alias domains.** Their page showed "You do not have access to that website", because only websites were looked up. Such a domain has no folder tree of its own: the tab now opens the website it belongs to, in the subdomain's own folder (for example `updates` for updates.qlopy.com), or in `web` for an alias. The domain is checked with ISPConfig's own permissions, and the folder comes from the panel's database, never from the browser.
+
 ## 1.4.0
 
 - **The File Manager tab opens in the website's `web` folder** (the document root) instead of its home folder with `log`, `ssl`, `private` and the rest; the home folder is one click away ("Home"). A site without `web` opens its home folder, as does a remembered folder that no longer exists. Reloading the file manager keeps the folder you were in. Optional setting `start_folder` in `configuration.php` chooses another folder (`''` for the home folder); an update keeps your configuration, so add it only if you want something other than `web`.

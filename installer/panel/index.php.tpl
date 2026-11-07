@@ -118,6 +118,29 @@ foreach ($sites as $s) {
     $by_id[(int) $s['domain_id']] = $s;
 }
 
+/**
+ * A vhost subdomain or alias domain this person may read: it has no folder tree of its own, it lives inside its parent website.
+ * Returns the parent website's id and the folder to open in it (a subdomain's own web folder; the parent's "web" for an alias), or null.
+ * Looked up with ISPConfig's own permission filter, never taken from the browser.
+ */
+function fm_child_of($app, int $id): ?array
+{
+    $row = $app->db->queryOneRecord(
+        "SELECT domain_id, type, parent_domain_id, web_folder FROM web_domain
+         WHERE domain_id = ? AND type IN ('vhostsubdomain', 'vhostalias') AND active = 'y' AND " . $app->tform->getAuthSQL('r'),
+        $id
+    );
+    if (! $row || (int) $row['parent_domain_id'] <= 0) {
+        return null;
+    }
+    $folder = $row['type'] === 'vhostsubdomain' ? trim((string) $row['web_folder'], '/') : '';
+    if ($folder !== '' && (! preg_match('#^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$#', $folder) || strpos('/' . $folder . '/', '/../') !== false)) {
+        $folder = '';
+    }
+
+    return ['parent' => (int) $row['parent_domain_id'], 'folder' => $folder === '' ? 'web' : $folder];
+}
+
 // ---- open one -----------------------------------------------------------------------------------------------------
 $opened = null;
 if (isset($_GET['site'])) {
@@ -129,6 +152,14 @@ if (isset($_GET['site'])) {
     } else {
         try {
             $site = $by_id[$site_id];
+            // opened from a subdomain's or alias's tab: start in its folder (only if it really belongs to this website)
+            $start = '';
+            if (isset($_GET['from'])) {
+                $child = fm_child_of($app, (int) $_GET['from']);
+                if ($child && $child['parent'] === $site_id) {
+                    $start = $child['folder'];
+                }
+            }
             $account = fm_create_account($site);
             $key = hex2bin(trim((string) @file_get_contents(FM_HOME . '/private/keys/sso.key')));
             if (strlen($key) !== 32) {
@@ -139,6 +170,7 @@ if (isset($_GET['site'])) {
                 'p' => $account['password'],
                 'name' => $site['domain'],
                 'acct_exp' => $account['expires'],
+                'start' => $start,
             ], $key, 60);
             $opened = ['site' => $site, 'url' => FM_APP_URL . '?r=/sso&token=' . $token];
             $app->log('File manager opened for website ' . $site['domain'] . ' (temporary FTP account ' . $account['username'] . ')', LOGLEVEL_DEBUG);
@@ -183,10 +215,16 @@ if (! $embed) {
 // Open straight away when there is no choice to make: a single website, or a website's own tab. This is done by the browser
 // (not on the plain page load), so a hidden image tag on another site cannot trigger it.
 $auto_id = 0;
+$auto_from = 0;
 if ($embed) {
     $wanted = (int) ($_GET['auto'] ?? 0);
+    $child = ($wanted && ! isset($by_id[$wanted])) ? fm_child_of($app, $wanted) : null;
     if ($wanted && isset($by_id[$wanted])) {
         $auto_id = $wanted;
+    } elseif ($child && isset($by_id[$child['parent']])) {
+        // the tab of a vhost subdomain or alias: open the website it belongs to
+        $auto_id = $child['parent'];
+        $auto_from = $wanted;
     } elseif ($wanted && ! $opened) {
         fm_notice('You do not have access to that website.');
     }
@@ -194,7 +232,8 @@ if ($embed) {
     $auto_id = (int) $sites[0]['domain_id'];
 }
 if (! $opened && $auto_id) {
-    echo '<script>setTimeout(function () { fmLoad(\'filemanager/index.php?' . ($embed ? 'embed=1&' : '') . 'site=' . $auto_id . $query . '\'); }, 0);</script>';
+    echo '<script>setTimeout(function () { fmLoad(\'filemanager/index.php?' . ($embed ? 'embed=1&' : '') . 'site=' . $auto_id
+        . ($auto_from ? '&from=' . $auto_from : '') . $query . '\'); }, 0);</script>';
 }
 
 // ---- the file manager itself ----------------------------------------------------------------------------------------

@@ -35,7 +35,8 @@ class SsoController
 
             // open the website's document root, not its home folder (logs, ssl, private, ...). A site without it falls back to the home
             // folder (FileController::getDirectory). 'start_folder' => '' in configuration.php opens the home folder.
-            $start = trim(str_replace('\\', '/', (string) ($config->get('start_folder') ?? 'web')), '/');
+            // a subdomain's tab opens that subdomain's own folder (named by the panel)
+            $start = $auth->startFolder() ?? trim(str_replace('\\', '/', (string) ($config->get('start_folder') ?? 'web')), '/');
             if ($start !== '' && strpos('/' . $start . '/', '/../') === false) {
                 $session->set(FileController::SESSION_CWD, '/' . $start);
             }
