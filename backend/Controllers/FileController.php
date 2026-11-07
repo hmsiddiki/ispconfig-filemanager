@@ -46,6 +46,15 @@ class FileController
         $this->separator = $this->storage->getSeparator();
     }
 
+    /**
+     * Let go of the session before a long operation (a big copy, delete or chmod). PHP keeps the session file locked for the whole request,
+     * so until then every other request of this user waits: a reload of the panel page showed an empty file manager until the operation ended.
+     */
+    protected function releaseSession(): void
+    {
+        $this->session->save();
+    }
+
     public function changeDirectory(Request $request, Response $response)
     {
         $path = $request->input('to', $this->separator);
@@ -87,6 +96,8 @@ class FileController
 
     public function copyItems(Request $request, Response $response)
     {
+        $this->releaseSession();
+
         $items = $request->input('items', []);
         $destination = $request->input('destination', $this->separator);
 
@@ -109,6 +120,8 @@ class FileController
 
     public function moveItems(Request $request, Response $response)
     {
+        $this->releaseSession();
+
         $items = $request->input('items', []);
         $destination = $request->input('destination', $this->separator);
 
@@ -127,6 +140,8 @@ class FileController
 
     public function zipItems(Request $request, Response $response, ArchiverInterface $archiver)
     {
+        $this->releaseSession();
+
         $items = $request->input('items', []);
         $destination = $request->input('destination', $this->separator);
         $name = $request->input('name', $this->config->get('frontend_config.default_archive_name'));
@@ -156,6 +171,8 @@ class FileController
 
     public function unzipItem(Request $request, Response $response, ArchiverInterface $archiver)
     {
+        $this->releaseSession();
+
         $source = $request->input('item');
         $destination = $request->input('destination', $this->separator);
 
@@ -166,6 +183,8 @@ class FileController
 
     public function chmodItems(Request $request, Response $response)
     {
+        $this->releaseSession();
+
         $items = $request->input('items', []);
         $permissions = $request->input('permissions', 0);
         /** @var null|'all'|'folders'|'files' */
@@ -196,6 +215,8 @@ class FileController
 
     public function deleteItems(Request $request, Response $response)
     {
+        $this->releaseSession();
+
         $items = $request->input('items', []);
 
         $success = true;

@@ -82,9 +82,9 @@ If your panel is not on port 8080, add `--panel-port 2087` (your port) the same 
 
 **Upload limit.** The default upload limit is now **2 GB** (it was 100 MB). When you update, a server that still has the old 100 MB default is raised to 2 GB automatically, and the installer says so. A value you set yourself (anything other than the old default) is never changed. To choose another limit, edit `frontend_config.upload_max_size` in `/usr/local/ispconfig/filemanager/configuration.php`, for example `500 * 1024 * 1024`; it takes effect on the next request, there is nothing to restart.
 
-**Other settings** are not touched by an update, because your `configuration.php` is kept. The only new optional one is `unzip_php_cli`: if Unzip says it cannot start, add the full path of the command-line PHP, for example `'unzip_php_cli' => '/usr/bin/php',`.
+**Other settings** are not touched by an update, because your `configuration.php` is kept. The only new optional one is `unzip_php_cli`: if Zip or Unzip says it cannot start, add the full path of the command-line PHP, for example `'unzip_php_cli' => '/usr/bin/php',`.
 
-**Needed since 1.2.0.** The background Unzip uses the command-line PHP and, for `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2` and `.tar.xz`, the `tar` program. Standard ISPConfig servers have both. `.zip` needs the PHP `zip` extension, which is already required (see below).
+**Needed since 1.2.0.** The background Zip (since 1.3.0) and Unzip use the command-line PHP and, for `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2` and `.tar.xz`, the `tar` program. Standard ISPConfig servers have both. `.zip` needs the PHP `zip` extension, which is already required (see below).
 
 **If something goes wrong,** install the previous version again with `--version` (for example `--version 1.1.0`). Your configuration is kept in that direction too.
 
@@ -192,7 +192,7 @@ Edit `/usr/local/ispconfig/filemanager/configuration.php` (changes apply immedia
 | `frontend_config.max_width` | widest the content gets, in px (an embedded file manager always fills its frame) |
 | `url_upload.enabled` / `max_size` / `timeout` | "Upload from URL": on/off, size limit per file (default 200 MB), time limit |
 | `url_upload.max_concurrent_per_user` / `max_concurrent_total` | downloads at once (default 1 per person, 3 on the server) |
-| `unzip_php_cli` | optional: full path of the command-line PHP used for the background unzip worker (default: found next to the PHP the panel runs on) |
+| `unzip_php_cli` | optional: full path of the command-line PHP used for the background zip and unzip workers (default: found next to the PHP the panel runs on) |
 | `frontend_config.upload_max_size` | upload size limit per file, checked in the browser and again on the server (default 2 GB; uploads are sent in chunks, so PHP's `upload_max_filesize` does not apply) |
 | `frontend_config.editable` | file types that open in the code editor |
 

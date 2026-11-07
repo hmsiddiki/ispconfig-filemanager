@@ -751,20 +751,16 @@ export default {
           if (! value) {
             return
           }
-          this.isLoading = true
-          api.zipItems({
+          // the server zips in the background and answers at once: the page stays usable, and a reload or a closed page does not stop it
+          api.startZip({
             name: value,
             items: item ? [item] : this.getSelected(),
             destination: this.$store.state.cwd.location,
           })
             .then(() => {
-              this.isLoading = false
-              this.loadFiles()
+              if (this.$refs.unzipJobs) this.$refs.unzipJobs.refresh()
             })
-            .catch(error => {
-              this.isLoading = false
-              this.handleError(error)
-            })
+            .catch(error => this.handleError(error))
           this.checked = []
         }
       })

@@ -255,6 +255,18 @@ const api = {
         .catch(error => reject(error))
     })
   },
+  // zip in the background: answers at once with a job id; progress comes through unzipStatus, which lists every job kind
+  startZip (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('zipjob', {
+        name: params.name,
+        items: params.items.map(item => ({ path: item.path, type: item.type, size: item.size || 0, time: item.time || 0 })),
+        destination: params.destination,
+      })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
   unzipStatus (params) {
     return new Promise((resolve, reject) => {
       axios.post('unzipjob/status', { dismiss: params.dismiss || [] })

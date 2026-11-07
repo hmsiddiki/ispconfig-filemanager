@@ -55,9 +55,16 @@ class UnzipJob
         return preg_match('/\.(tar|tar\.gz|tgz|tar\.bz2|tbz2|tbz|tar\.xz|txz)$/', $name) === 1 ? 'tar' : null;
     }
 
+    /** Running states of every background job kind: unzip (copying, extracting) and zip (listing, zipping, uploading). */
     public static function isActive(array $state): bool
     {
-        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting'], true);
+        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading'], true);
+    }
+
+    /** 'unzip' or 'zip' (jobs written before zip jobs existed have no kind: they are unzips). */
+    public static function kindOf(array $state): string
+    {
+        return ($state['kind'] ?? 'unzip') === 'zip' ? 'zip' : 'unzip';
     }
 
     /** The state as the browser should see it: a job that is "running" but silent for too long has died. */
@@ -65,8 +72,11 @@ class UnzipJob
     {
         if (self::isActive($state) && time() - (int) ($state['updated'] ?? 0) > self::STALL_AFTER) {
             $state['state'] = 'error';
-            $state['message'] = 'The unzip stopped unexpectedly. Files extracted so far were kept.';
+            $state['message'] = self::kindOf($state) === 'zip'
+                ? 'The zip stopped unexpectedly. Nothing was saved.'
+                : 'The unzip stopped unexpectedly. Files extracted so far were kept.';
         }
+        $state['kind'] = self::kindOf($state);
 
         return $state;
     }

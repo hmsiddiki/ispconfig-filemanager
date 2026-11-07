@@ -354,4 +354,16 @@ return [
             'read', 'write', 'zip',
         ],
     ],
+    // zip as a background job; its progress and cancel go through /unzipjob/status and /unzipjob/cancel, which serve every job kind
+    [
+        'route' => [
+            'POST', '/zipjob', '\Filegator\Controllers\ZipJobController@start',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write', 'zip',
+        ],
+    ],
 ];

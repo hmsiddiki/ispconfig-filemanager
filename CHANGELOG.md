@@ -2,6 +2,14 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.3.0
+
+- **Zip runs in the background too.** "Zip" answers at once and the server builds the zip in a process of its own, like Unzip since 1.2.0. Zipping a whole website used to run inside the browser's request: the page showed a spinner with no progress, the web server's time limit could cut it off half-way, and while it ran the file manager could not be used at all, not even after reloading the panel page (it stayed empty). Now a progress card (counting files, then "n / m files" with the bytes, then saving the zip) shows it, with a Cancel button, and finds the job again after a reload.
+- The zip is written as each file is read, so the server needs disk space for the zip only (it used to keep a copy of every file until the end), and it is stored in the website only when it is complete: a zip that fails or is cancelled leaves nothing behind. Zips over 4 GB and with more than 65,535 files are supported (zip64). Images, videos and archives are stored without compressing them again, which saves a lot of time on media-heavy sites.
+- Names inside the zip start at the folder the items were picked in, so unzipping it in the same place puts everything back where it was (they used to include the full path from the website's root).
+- A name that is already taken is never overwritten: the new zip gets a number ("site (1).zip").
+- **The file manager no longer freezes during long operations.** Copy, move, delete, permissions, and the job status polls let go of the PHP session before they start. PHP locks the session for the whole request, so one long operation used to make every other request of the file manager wait, including a reload.
+
 ## 1.2.1
 
 - **Updating raises the old upload default.** The 2 GB upload default from 1.2.0 only reached new installs, because an update keeps `configuration.php`. The installer now changes `upload_max_size` to 2 GB when it still holds the old shipped value (exactly 100 MB); a value you set yourself is never changed.

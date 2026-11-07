@@ -140,6 +140,68 @@ class Filesystem implements Service
         ];
     }
 
+    /**
+     * Read a file into a temporary stream for a long job (the background zip), without the two extra questions readStream() asks first
+     * (is it a folder? how big is it?): over FTP each of those is a round trip, and a site has thousands of files.
+     * Over FTP the download is non-blocking, so $tick(bytes so far) is called while a large file comes in: the job can report progress
+     * and stop when cancelled (an exception thrown from $tick ends the transfer). Returns a rewound stream; the caller closes it.
+     *
+     * @param callable|null $tick function (int $bytes): void
+     * @return resource
+     */
+    public function readStreamForJob(string $path, ?callable $tick = null)
+    {
+        $full = $this->applyPathPrefix($path);
+        $adapter = $this->storage->getAdapter();
+
+        if ($adapter instanceof \League\Flysystem\Adapter\Ftp && function_exists('ftp_nb_fget')) {
+            $stream = fopen('php://temp/maxmemory:' . (8 * 1024 * 1024), 'w+b');
+            try {
+                $connection = $adapter->getConnection();
+                $status = ftp_nb_fget($connection, $stream, $full, FTP_BINARY);
+                while ($status === FTP_MOREDATA) {
+                    if ($tick !== null) {
+                        $tick((int) ftell($stream));
+                    }
+                    $status = ftp_nb_continue($connection);
+                }
+                if ($status !== FTP_FINISHED) {
+                    throw new \RuntimeException('Read failed');
+                }
+            } catch (\Throwable $e) {
+                fclose($stream);
+                if (isset($connection) && isset($status) && $status === FTP_MOREDATA) {
+                    // a transfer stopped half-way leaves the control connection out of step: start a new one for what comes next
+                    $adapter->disconnect();
+                }
+                throw $e;
+            }
+            rewind($stream);
+
+            return $stream;
+        }
+
+        $result = $this->storage->getAdapter()->readStream($full);
+        if (! is_array($result) || ! is_resource($result['stream'] ?? null)) {
+            throw new \RuntimeException('Read failed');
+        }
+
+        return $result['stream'];
+    }
+
+    /**
+     * store(), but answers with the name the file got (a taken name gets a number: "site (1).zip"), or null when the write failed.
+     */
+    public function storeUnique(string $path, string $name, $resource): ?string
+    {
+        $destination = $this->joinPaths($this->applyPathPrefix($path), $name);
+        while ($this->storage->has($destination)) {
+            $destination = $this->upcountName($destination);
+        }
+
+        return $this->storage->putStream($destination, $resource) ? $this->getBaseName($destination) : null;
+    }
+
     public function move(string $from, string $to): bool
     {
         $from = $this->applyPathPrefix($from);

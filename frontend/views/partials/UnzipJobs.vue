@@ -2,11 +2,12 @@
   <div v-if="jobs.length" class="fs-unzip-jobs">
     <div v-for="job in jobs" :key="job.id" class="fs-unzip box" :class="'is-' + job.state">
       <div class="fs-unzip-head">
-        <b class="fs-unzip-title">{{ lang('Unzip') }}: {{ job.name }}</b>
-        <button v-if="isActive(job)" type="button" class="button is-small is-light" :disabled="cancelling[job.id]" @click="cancel(job)">
+        <b class="fs-unzip-title">{{ job.kind === 'zip' ? lang('Zip') : lang('Unzip') }}: {{ job.name }}</b>
+        <!-- a zip being saved into the website cannot be stopped half-way: no Cancel then -->
+        <button v-if="isActive(job) && job.state !== 'uploading'" type="button" class="button is-small is-light" :disabled="cancelling[job.id]" @click="cancel(job)">
           {{ cancelling[job.id] ? lang('Cancelling...') : lang('Cancel') }}
         </button>
-        <button v-else type="button" class="delete" :aria-label="lang('Close')" @click="dismiss(job)" />
+        <button v-else-if="!isActive(job)" type="button" class="delete" :aria-label="lang('Close')" @click="dismiss(job)" />
       </div>
 
       <!-- no value attribute = Bulma's moving "indeterminate" bar (queued, or the size is not known yet) -->
@@ -33,8 +34,25 @@
           {{ lang('Extracting') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('files') }}
           <span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
         </template>
+        <template v-else-if="job.state === 'listing'">
+          {{ lang('Counting files') }}: {{ (job.files || 0).toLocaleString() }} ({{ formatBytes(job.bytes || 0, 0) }})
+        </template>
+        <template v-else-if="job.state === 'zipping'">
+          {{ lang('Zipping') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('files') }}<template v-if="job.total_bytes">, {{ formatBytes(job.bytes || 0, 0) }} / {{ formatBytes(job.total_bytes, 0) }}</template>
+          <span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'uploading'">
+          {{ lang('Saving the zip') }}: {{ formatBytes(job.bytes || 0, 0) }} / {{ formatBytes(job.size || 0, 0) }}
+        </template>
+        <template v-else-if="job.state === 'done' && job.kind === 'zip'">
+          {{ lang('Zipped') }}: {{ (job.files || 0).toLocaleString() }} {{ lang('files') }}, {{ formatBytes(job.size || 0, 1) }}<span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+          <span v-if="job.saved_as && job.saved_as !== job.name"><br>{{ lang('Saved as') }} {{ job.saved_as }}</span>
+        </template>
         <template v-else-if="job.state === 'done'">
           {{ lang('Unzipped') }}: {{ (job.files || 0).toLocaleString() }} {{ lang('files') }}<span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'cancelled' && job.kind === 'zip'">
+          {{ lang('Zip cancelled') }}. {{ lang('Nothing was saved.') }}
         </template>
         <template v-else-if="job.state === 'cancelled'">
           {{ lang('Unzip cancelled') }}. {{ lang('Files extracted so far were kept.') }}
@@ -43,7 +61,7 @@
           {{ lang(job.message || 'Unknown error') }}
         </template>
       </p>
-      <p v-if="job.state === 'extracting' && job.current" class="fs-unzip-current">
+      <p v-if="(job.state === 'extracting' || job.state === 'zipping') && job.current" class="fs-unzip-current">
         {{ job.current }}
       </p>
       <p v-if="job.state === 'done' && job.errors && job.errors.length" class="fs-unzip-current">
@@ -61,7 +79,7 @@ const AUTO_CLOSE_MS = 10000
 const MISSING_LIMIT = 4
 
 /**
- * Shows the user's unzip jobs and keeps polling them while any is running. The job itself runs on the server in a process of its own, so this
+ * Shows the user's background jobs (unzip and zip) and keeps polling them while any is running. The job itself runs on the server in a process of its own, so this
  * component can be created at any time (also after a page reload): it asks the server for the jobs and picks up where they are.
  */
 export default {
@@ -87,11 +105,14 @@ export default {
   },
   methods: {
     isActive(job) {
-      return ['queued', 'copying', 'extracting'].indexOf(job.state) !== -1
+      return ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading'].indexOf(job.state) !== -1
     },
     percent(job) {
       if (job.state === 'copying' && job.total > 0) return Math.min(99, Math.floor(((job.bytes || 0) / job.total) * 100))
       if (job.state === 'extracting' && job.total > 0) return Math.min(99, Math.floor(((job.done || 0) / job.total) * 100))
+      if (job.state === 'zipping' && job.total_bytes > 0) return Math.min(99, Math.floor(((job.bytes || 0) / job.total_bytes) * 100))
+      if (job.state === 'zipping' && job.total > 0) return Math.min(99, Math.floor(((job.done || 0) / job.total) * 100))
+      if (job.state === 'uploading' && job.size > 0) return Math.min(99, Math.floor(((job.bytes || 0) / job.size) * 100))
       return 0
     },
     /** Ask the server now (also called by the file list right after it starts a job). */
@@ -153,7 +174,7 @@ export default {
     },
     finished(job) {
       if (job.state === 'done') {
-        this.$toast.open({ message: this.lang('Unzipped'), type: 'is-success' })
+        this.$toast.open({ message: this.lang(job.kind === 'zip' ? 'Zipped' : 'Unzipped'), type: 'is-success' })
         this.closeTimers[job.id] = window.setTimeout(() => this.dismiss(job), AUTO_CLOSE_MS)
       } else {
         this.closeTimers[job.id] = 0
