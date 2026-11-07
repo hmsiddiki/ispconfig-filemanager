@@ -192,6 +192,7 @@ Edit `/usr/local/ispconfig/filemanager/configuration.php` (changes apply immedia
 | `frontend_config.max_width` | widest the content gets, in px (an embedded file manager always fills its frame) |
 | `url_upload.enabled` / `max_size` / `timeout` | "Upload from URL": on/off, size limit per file (default 200 MB), time limit |
 | `url_upload.max_concurrent_per_user` / `max_concurrent_total` | downloads at once (default 1 per person, 3 on the server) |
+| `start_folder` | optional: the folder the File Manager tab opens in (default `'web'`, the website's document root; a site without it opens its home folder). `''` opens the home folder |
 | `unzip_php_cli` | optional: full path of the command-line PHP used for the background zip and unzip workers (default: found next to the PHP the panel runs on) |
 | `frontend_config.upload_max_size` | upload size limit per file, checked in the browser and again on the server (default 2 GB; uploads are sent in chunks, so PHP's `upload_max_filesize` does not apply) |
 | `frontend_config.editable` | file types that open in the code editor |

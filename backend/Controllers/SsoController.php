@@ -2,11 +2,13 @@
 
 namespace Filegator\Controllers;
 
+use Filegator\Config\Config;
 use Filegator\Kernel\Request;
 use Filegator\Kernel\Response;
 use Filegator\Services\Auth\AuthInterface;
 use Filegator\Services\Auth\Adapters\IspconfigAuth;
 use Filegator\Services\Logger\LoggerInterface;
+use Filegator\Services\Session\SessionStorageInterface as Session;
 
 /**
  * Entry point for the control panel: ?r=/sso&token=...  Logs in with the single-use token, then sends the browser on
@@ -21,7 +23,7 @@ class SsoController
         $this->logger = $logger;
     }
 
-    public function login(Request $request, Response $response, AuthInterface $auth)
+    public function login(Request $request, Response $response, AuthInterface $auth, Session $session, Config $config)
     {
         if (! $auth instanceof IspconfigAuth) {
             return $response->json('Not found', 404);
@@ -30,6 +32,13 @@ class SsoController
         $ip = $request->getClientIp();
         if ($auth->loginWithToken((string) $request->input('token'))) {
             $this->logger->log('Panel login from IP ' . $ip);
+
+            // open the website's document root, not its home folder (logs, ssl, private, ...). A site without it falls back to the home
+            // folder (FileController::getDirectory). 'start_folder' => '' in configuration.php opens the home folder.
+            $start = trim(str_replace('\\', '/', (string) ($config->get('start_folder') ?? 'web')), '/');
+            if ($start !== '' && strpos('/' . $start . '/', '/../') === false) {
+                $session->set(FileController::SESSION_CWD, '/' . $start);
+            }
 
             // keep only the (validated) theme hint; everything else, the token above all, is dropped
             $theme = (string) $request->input('theme');

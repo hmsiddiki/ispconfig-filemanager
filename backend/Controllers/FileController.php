@@ -68,6 +68,20 @@ class FileController
     {
         $path = $request->input('dir', $this->session->get(self::SESSION_CWD, $this->separator));
 
+        // the folder remembered in the session (the start folder after a panel login, or the last one opened) may not exist (a site
+        // without "web", a folder deleted meanwhile): open the home folder instead of an empty, broken view
+        if ($request->input('dir') === null && trim((string) $path, '/') !== '') {
+            try {
+                $usable = $this->storage->fileExists($path) && $this->storage->isDir($path);
+            } catch (\Throwable $e) {
+                $usable = false;
+            }
+            if (! $usable) {
+                $path = $this->separator;
+                $this->session->set(self::SESSION_CWD, $path);
+            }
+        }
+
         $content = $this->storage->getDirectoryCollection($path);
 
         return $response->json($content);

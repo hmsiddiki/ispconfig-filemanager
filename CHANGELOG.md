@@ -2,6 +2,10 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.4.0
+
+- **The File Manager tab opens in the website's `web` folder** (the document root) instead of its home folder with `log`, `ssl`, `private` and the rest; the home folder is one click away ("Home"). A site without `web` opens its home folder, as does a remembered folder that no longer exists. Reloading the file manager keeps the folder you were in. Optional setting `start_folder` in `configuration.php` chooses another folder (`''` for the home folder); an update keeps your configuration, so add it only if you want something other than `web`.
+
 ## 1.3.1
 
 - **The installer finds the panel's port by itself.** It reads it from the panel's nginx (or Apache) vhost, so a panel on 2087 or any other port no longer stops the install at the last test with "HTTP 000". The port is shown in the first step; `--panel-port` still overrides it. If nothing answers, the message now says so and names the address it tried.
