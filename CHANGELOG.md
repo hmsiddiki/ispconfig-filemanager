@@ -2,6 +2,10 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.3.1
+
+- **The installer finds the panel's port by itself.** It reads it from the panel's nginx (or Apache) vhost, so a panel on 2087 or any other port no longer stops the install at the last test with "HTTP 000". The port is shown in the first step; `--panel-port` still overrides it. If nothing answers, the message now says so and names the address it tried.
+
 ## 1.3.0
 
 - **Zip runs in the background too.** "Zip" answers at once and the server builds the zip in a process of its own, like Unzip since 1.2.0. Zipping a whole website used to run inside the browser's request: the page showed a spinner with no progress, the web server's time limit could cut it off half-way, and while it ran the file manager could not be used at all, not even after reloading the panel page (it stayed empty). Now a progress card (counting files, then "n / m files" with the bytes, then saving the zip) shows it, with a Cancel button, and finds the job again after a reload.

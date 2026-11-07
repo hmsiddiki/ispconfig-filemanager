@@ -9,7 +9,7 @@
 #           --ftp-host HOST     where Pure-FTPd listens      (default 127.0.0.1)
 #           --ftp-port PORT                                  (default 21)
 #           --ttl-hours N       how long one file manager session lasts (default 8)
-#           --panel-port PORT   the ISPConfig panel port    (default 8080)
+#           --panel-port PORT   the ISPConfig panel port    (default: read from the panel's web server config, else 8080)
 #           --with-menu         also add a Sites > File Manager side-menu entry (default: only the tab on each website)
 #
 # Safe to run again: an update replaces the program files and keeps your configuration and keys.
@@ -21,7 +21,8 @@ PANEL_DIR="/usr/local/ispconfig"
 FTP_HOST="127.0.0.1"
 FTP_PORT="21"
 TTL_HOURS="8"
-PANEL_PORT="8080"
+PANEL_PORT=""
+PANEL_SCHEME="https"
 CHECK_ONLY=0
 WITH_MENU=0
 
@@ -47,13 +48,33 @@ done
 
 [[ "$TTL_HOURS" =~ ^[0-9]+$ ]] && [ "$TTL_HOURS" -ge 1 ] && [ "$TTL_HOURS" -le 72 ] || die "--ttl-hours must be a whole number from 1 to 72"
 [[ "$FTP_PORT" =~ ^[0-9]+$ ]] || die "--ftp-port must be a number"
-[[ "$PANEL_PORT" =~ ^[0-9]+$ ]] || die "--panel-port must be a number"
+[ -z "$PANEL_PORT" ] || [[ "$PANEL_PORT" =~ ^[0-9]+$ ]] || die "--panel-port must be a number"
 [ "$(id -u)" -eq 0 ] || die "run this as root (sudo ./install.sh)"
 
 echo
 echo "File Manager for ISPConfig"
 echo "=========================="
 
+# The panel's port: ISPConfig's default is 8080, but many servers move it (2087, 8443, ...). Read it from the panel's own vhost.
+if [ -z "$PANEL_PORT" ]; then
+    for vhost in /etc/nginx/sites-enabled/000-ispconfig.vhost /etc/nginx/sites-available/ispconfig.vhost \
+                 /etc/apache2/sites-enabled/000-ispconfig.vhost /etc/apache2/sites-available/ispconfig.vhost; do
+        [ -f "$vhost" ] || continue
+        line="$(grep -m1 -E '^[[:space:]]*(listen[[:space:]]+[0-9]+|<VirtualHost[[:space:]]+[^>]*:[0-9]+)' "$vhost" || true)"
+        port="$(printf '%s' "$line" | grep -oE '[0-9]{2,5}' | head -1 || true)"
+        if [ -n "$port" ]; then
+            PANEL_PORT="$port"
+            # nginx says "ssl" on the listen line; an Apache panel vhost without SSLEngine on is plain http
+            if [[ "$vhost" == *nginx* ]]; then
+                [[ "$line" == *ssl* ]] || PANEL_SCHEME="http"
+            else
+                grep -qiE '^[[:space:]]*SSLEngine[[:space:]]+on' "$vhost" || PANEL_SCHEME="http"
+            fi
+            break
+        fi
+    done
+    PANEL_PORT="${PANEL_PORT:-8080}"
+fi
 # ---- 1. ISPConfig ------------------------------------------------------------------------------------------------
 echo "1. Checking ISPConfig"
 CONF="$PANEL_DIR/interface/lib/config.inc.php"
@@ -61,7 +82,7 @@ CONF="$PANEL_DIR/interface/lib/config.inc.php"
 VERSION="$(grep -oP "define\('ISPC_APP_VERSION',\s*'\K[^']+" "$CONF" | head -1 || true)"
 [ -n "$VERSION" ] || die "could not read the ISPConfig version from $CONF"
 case "$VERSION" in
-    3.2*|3.3*) ok "ISPConfig $VERSION" ;;
+    3.2*|3.3*) ok "ISPConfig $VERSION (panel at $PANEL_SCHEME://127.0.0.1:$PANEL_PORT)" ;;
     3.*)       warn "ISPConfig $VERSION: only 3.2 and 3.3 were tested; continuing" ;;
     *)         die "ISPConfig $VERSION is not supported (needs 3.x)" ;;
 esac
@@ -196,12 +217,13 @@ fi
 
 # The test above runs as root on the command line. The panel's PHP runs as another user in a sandbox, so prove it over the
 # real web path too: the page must be the real app (not an error text), and its API must answer from a working session.
-PANEL_URL="https://127.0.0.1:$PANEL_PORT"
+PANEL_URL="$PANEL_SCHEME://127.0.0.1:$PANEL_PORT"
 PAGE="$(curl -ks --max-time 15 -w '\n%{http_code}' "$PANEL_URL$APP_URL" || true)"
 PAGE_CODE="${PAGE##*$'\n'}"
 case "$PAGE" in
     *'id=app'*) [ "$PAGE_CODE" = "200" ] && ok "the panel serves the file manager page ($PANEL_URL$APP_URL)" || die "unexpected HTTP $PAGE_CODE from $PANEL_URL$APP_URL" ;;
-    *) die "the panel did not serve the file manager (HTTP $PAGE_CODE): ${PAGE:0:200}" ;;
+    *) [ "$PAGE_CODE" = "000" ] && die "nothing answered at $PANEL_URL. If the panel uses another port, run again with --panel-port PORT."
+       die "the panel did not serve the file manager (HTTP $PAGE_CODE): ${PAGE:0:200}" ;;
 esac
 API="$(curl -ks --max-time 15 -w '\n%{http_code}' "$PANEL_URL$APP_URL?r=/getuser" || true)"
 case "$API" in

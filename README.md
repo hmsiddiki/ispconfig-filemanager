@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/mai
 
 It downloads the latest release, **verifies its checksum**, checks your server, installs, and tests itself.
 
-If your ISPConfig panel is not on port 8080 (for example it runs on 2087), pass the port. The `-s --` is required: it hands the flag to the installer instead of to bash.
+The installer reads the panel's port (8080, 2087, ...) from the panel's web server config and shows it in its first step. Only if it picks the wrong one, pass the port yourself. The `-s --` is required: it hands the flag to the installer instead of to bash.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash -s -- --panel-port 2087
@@ -66,7 +66,7 @@ This installs the **latest release**. To install one particular version instead 
 curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh | sudo bash -s -- --version 1.2.0
 ```
 
-If your panel is not on port 8080, add `--panel-port 2087` (your port) the same way as in the install command above.
+The panel port is found automatically (since 1.3.1); `--panel-port 2087` (your port) still overrides it, the same way as in the install command above.
 
 **What an update does**
 
@@ -116,7 +116,7 @@ passes does it add the menu entry, the tab and the clean-up job. If a step fails
 
 ```
 --panel-dir DIR     ISPConfig folder                          default /usr/local/ispconfig
---panel-port PORT   port the panel answers on                 default 8080
+--panel-port PORT   port the panel answers on                 default: read from the panel vhost, else 8080
 --ftp-host HOST     where Pure-FTPd listens                   default 127.0.0.1
 --ftp-port PORT                                               default 21
 --ttl-hours N       how long one file manager session lasts   default 8 (1–72)
@@ -228,7 +228,7 @@ or open the app with `?theme=dark` / `?theme=light` (valid values: `light`, `dar
 | "The file manager is not set up correctly: its data folder is not writable" | `/usr/local/ispconfig/interface/temp/filemanager` must be owned by the panel user (`chown -R ispconfig:ispconfig …`), or the panel's PHP service has a different sandbox (see above) |
 | "This login link has expired / was already used" | open the file manager again from the panel (links work once, for 60 seconds) |
 | "Could not open the website folder" | Pure-FTPd refused the temporary account: check the FTP service and that `ftp_user` has the `expires` column |
-| Installer stops with "the panel did not serve the file manager (HTTP 000)": panel not on port 8080 | pass `--panel-port`, e.g. `curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh \| sudo bash -s -- --panel-port 2087` |
+| Installer stops with "nothing answered at https://127.0.0.1:PORT" (older versions: "HTTP 000"): the panel port was not found | pass `--panel-port`, e.g. `curl -fsSL https://raw.githubusercontent.com/hmsiddiki/ispconfig-filemanager/main/get.sh \| sudo bash -s -- --panel-port 2087` |
 | A client sees no websites | they have none, or none that is an active "vhost" website on this server |
 | Logs | `/usr/local/ispconfig/interface/temp/filemanager/logs/app.log` and ISPConfig's own log (Monitor → Logs) |
 
