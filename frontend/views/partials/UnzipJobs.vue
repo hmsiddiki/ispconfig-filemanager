@@ -53,6 +53,7 @@
         <template v-else-if="job.state === 'extracting'">
           {{ lang('Extracting') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('files') }}
           <span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+          <span v-if="job.conflict === 'overwrite'"><br>{{ lang('Replacing existing files') }}</span>
         </template>
         <template v-else-if="job.state === 'listing'">
           {{ lang('Counting files') }}: {{ (job.files || 0).toLocaleString() }} ({{ formatBytes(job.bytes || 0, 0) }})

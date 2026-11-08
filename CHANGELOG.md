@@ -2,6 +2,12 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.1
+
+- **Unzipping over existing files no longer makes endless " (1)" copies.** A file that was already there got a numbered name, but the numbering looked at the whole path: for a file without an extension inside a folder with a dot in its name (`.git/HEAD`, `jquery.ui/LICENSE`) it renamed the folder instead, and wrote the file into a new folder ` (1).git`. Unzipping a plugin over its live copy made ` (1).git`, ` (2).git` ... and never seemed to end. Now only the file name gets the number (`HEAD (1)`, `photo (1).jpg`, `.htaccess (1)`).
+- **Unzip asks what to do with files that already exist:** *Keep both* (default: the new file gets a number) or *Replace the existing file* (for updating a plugin or site from a zip). Folders are always merged: an existing folder is used as it is. The progress card says when files are being replaced.
+- Unzip creates the archive's folders under exactly their own names. It used the "New folder" function, which checks a name by listing the whole existing folder recursively (over FTP, minutes for a large folder) and renames a taken name.
+- "New folder" checks whether a name is taken with one quick question instead of that recursive listing, and also numbers the name of an existing empty folder.
 ## 1.5.0
 
 - **Uploads are much faster.** Several causes, all fixed:

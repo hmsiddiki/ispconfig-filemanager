@@ -20,6 +20,8 @@ class UnzipJobController extends BackgroundJobController
     {
         $source = (string) $request->input('item');
         $destination = (string) $request->input('destination', $this->storage->getSeparator());
+        // a file that is already there: 'rename' (keep both, the new one gets " (1)") or 'overwrite' (replace it)
+        $conflict = in_array((string) $request->input('conflict', 'rename'), UnzipJob::CONFLICTS, true) ? (string) $request->input('conflict') : 'rename';
 
         $blob = $this->loginBlob();
         // the session lock must not be held while the job is checked and started, or the user's other requests wait for it
@@ -37,9 +39,9 @@ class UnzipJobController extends BackgroundJobController
 
         $id = bin2hex(random_bytes(12));
         $this->jobs->cleanup(86400);
-        $this->jobs->write($id, ['kind' => 'unzip', 'state' => 'queued', 'name' => basename($source), 'started' => time(), 'destination' => $destination]);
+        $this->jobs->write($id, ['kind' => 'unzip', 'state' => 'queued', 'name' => basename($source), 'started' => time(), 'destination' => $destination, 'conflict' => $conflict]);
 
-        $payload = $this->basePayload($id, $blob) + ['source' => $source, 'destination' => $destination];
+        $payload = $this->basePayload($id, $blob) + ['source' => $source, 'destination' => $destination, 'conflict' => $conflict];
         $file = $this->jobs->putPayload($id, $payload);
         $this->logger->log('Unzip started: ' . basename($source));
 
@@ -49,7 +51,7 @@ class UnzipJobController extends BackgroundJobController
 
         $this->jobs->takePayload($id);
         $this->runHere($response, ['id' => $id], function () use ($id, $payload, $source, $destination) {
-            (new UnzipJob($this->storage, $this->jobs, $payload['tmp_dir']))->run($id, $source, $destination);
+            (new UnzipJob($this->storage, $this->jobs, $payload['tmp_dir']))->onConflict($conflict)->run($id, $source, $destination);
         });
 
         return $response->json(['id' => $id]);

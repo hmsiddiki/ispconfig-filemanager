@@ -31,11 +31,24 @@ class UnzipJob
     /** folders this job made itself: nothing was in them before, so a file written there cannot clash with an existing one */
     protected $fresh = [];
 
+    /** What happens to a file that is already there: 'rename' (keep both: the new one gets " (1)") or 'overwrite' (replace it). */
+    protected $conflict = 'rename';
+
+    public const CONFLICTS = ['rename', 'overwrite'];
+
     public function __construct(Filesystem $storage, UrlJobs $jobs, string $tmp_dir)
     {
         $this->storage = $storage;
         $this->jobs = $jobs;
         $this->tmp_dir = rtrim($tmp_dir, '/\\');
+    }
+
+    /** 'rename' (default, keep both) or 'overwrite'. Anything else keeps the default. */
+    public function onConflict(string $mode): self
+    {
+        $this->conflict = in_array($mode, self::CONFLICTS, true) ? $mode : 'rename';
+
+        return $this;
     }
 
     /** zip, or one of the tar family: the extensions the job can unpack. */
@@ -100,7 +113,7 @@ class UnzipJob
     {
         $started = (int) ($this->jobs->read($id)['started'] ?? time());
         $name = basename($source);
-        $base = ['name' => $name, 'started' => $started, 'destination' => $destination];
+        $base = ['name' => $name, 'started' => $started, 'destination' => $destination, 'conflict' => $this->conflict];
         $tmp = null;
         $zip = null;
         $zip_open = false;
@@ -237,7 +250,11 @@ class UnzipJob
         return ['files' => $done, 'failed' => $failed, 'errors' => $errors, 'total' => $total, 'done' => $done];
     }
 
-    /** Folders in the archive are created once each; one that is already there is simply used. */
+    /**
+     * Folders in the archive are created once each, under exactly their own name; one that is already there is simply used.
+     * (It used the file manager's "new folder", which renames a taken name to "name (1)" and decided "taken" by listing the whole
+     * folder recursively over FTP: unzipping over an existing folder made "(1)" copies and took minutes per folder.)
+     */
     protected function ensureDir(string $destination, string $dir): void
     {
         $dir = trim($dir, '/');
@@ -251,7 +268,9 @@ class UnzipJob
             if (! isset($this->created[$current])) {
                 $full = rtrim($destination, '/') . '/' . $current;
                 if (! $this->storage->fileExists($full)) {
-                    $this->storage->createDir(rtrim($destination, '/') . ($parent === '' ? '' : '/' . $parent), $part);
+                    if (! $this->storage->ensureDirectory($full)) {
+                        throw new \RuntimeException('Cannot create the folder');
+                    }
                     $this->fresh[$current] = true;
                 } elseif ($parent !== '' && isset($this->fresh[$parent])) {
                     $this->fresh[$current] = true;
@@ -278,9 +297,15 @@ class UnzipJob
             }
             try {
                 $target = rtrim($destination, '/') . ($dir === '.' ? '' : '/' . $dir);
-                $ok = $dir !== '.' && isset($this->fresh[$dir])
-                    ? $this->storage->storeNew($target, basename($path), $stream)
-                    : $this->storage->store($target, basename($path), $stream);
+                // in a folder this job made, nothing can clash; elsewhere an existing file is replaced in place (keeping its
+                // permissions) or kept, with the new one numbered ("name (1).ext"), as chosen
+                if ($dir !== '.' && isset($this->fresh[$dir])) {
+                    $ok = $this->storage->storeNew($target, basename($path), $stream);
+                } elseif ($this->conflict === 'overwrite') {
+                    $ok = $this->storage->replace($target, basename($path), $stream);
+                } else {
+                    $ok = $this->storage->store($target, basename($path), $stream);
+                }
                 if (! $ok) {
                     throw new \RuntimeException('Store failed');
                 }

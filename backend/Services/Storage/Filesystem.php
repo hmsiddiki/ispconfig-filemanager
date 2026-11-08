@@ -34,15 +34,33 @@ class Filesystem implements Service
         $this->storage = new Flysystem($adapter(), $config);
     }
 
+    /**
+     * A new folder named $name in $path; a name that is taken gets a number ("photos (1)"). Taken is asked with has() (one question
+     * to the storage). It used to list the whole existing folder recursively, which over FTP took minutes for a large folder.
+     */
     public function createDir(string $path, string $name)
     {
         $destination = $this->joinPaths($this->applyPathPrefix($path), $name);
 
-        while (! empty($this->storage->listContents($destination, true))) {
+        while ($this->storage->has($destination)) {
             $destination = $this->upcountName($destination);
         }
 
         return $this->storage->createDir($destination);
+    }
+
+    /**
+     * Make sure the folder $path exists, exactly under that name: an existing folder is used as it is, a missing one is created
+     * (with any missing parents). Never renames. For unzipping, where the archive's folders must land where the archive says.
+     */
+    public function ensureDirectory(string $path): bool
+    {
+        $destination = Util::normalizePath($this->applyPathPrefix($path));
+        if ($destination === '' || $this->storage->has($destination)) {
+            return true;
+        }
+
+        return (bool) $this->storage->createDir($destination);
     }
 
     public function createFile(string $path, string $name)
@@ -406,22 +424,34 @@ class Filesystem implements Service
         return -1;
     }
 
-    protected function upcountCallback($matches)
+    /**
+     * The next free-looking name for a taken path: "photo.jpg" -> "photo (1).jpg", "photo (1).jpg" -> "photo (2).jpg", "HEAD" -> "HEAD (1)",
+     * ".htaccess" -> ".htaccess (1)", "archive.tar.gz" -> "archive.tar (1).gz". Only the last part of the path (the file or folder
+     * name) changes.
+     *
+     * It used to run one pattern over the whole path, where the "extension" (".something" at the end) could take in slashes: for a
+     * file without an extension inside a folder with a dot ("qc/.git/HEAD") it matched ".git/HEAD" and wrote "qc/ (1).git/HEAD",
+     * a new folder. Unzipping over a git checkout then made " (1).git", " (2).git" ... trees without end.
+     */
+    public function upcountName($name)
     {
-        $index = isset($matches[1]) ? intval($matches[1]) + 1 : 1;
-        $ext = $matches[2] ?? '';
+        $name = (string) $name;
+        $slash = strrpos($name, '/');
+        $dir = $slash === false ? '' : substr($name, 0, $slash + 1);
+        $base = $slash === false ? $name : substr($name, $slash + 1);
 
-        return ' (' . $index . ')' . $ext;
-    }
+        // the extension is the last ".xxx" of the name, but a name that only starts with a dot (".htaccess", ".git") has none
+        $dot = strrpos($base, '.');
+        $ext = $dot !== false && $dot > 0 ? substr($base, $dot) : '';
+        $stem = $ext !== '' ? substr($base, 0, $dot) : $base;
 
-    protected function upcountName($name)
-    {
-        return preg_replace_callback(
-            '/(?:(?: \(([\d]+)\))?(\.[^.]+))?$/',
-            [$this, 'upcountCallback'],
-            $name,
-            1
-        );
+        $index = 1;
+        if (preg_match('/^(.*) \((\d+)\)$/', $stem, $m)) {
+            $stem = $m[1];
+            $index = (int) $m[2] + 1;
+        }
+
+        return $dir . $stem . ' (' . $index . ')' . $ext;
     }
 
     private function applyPathPrefix(string $path): string

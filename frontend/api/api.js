@@ -250,6 +250,7 @@ const api = {
       axios.post('unzipjob', {
         item: params.item,
         destination: params.destination,
+        conflict: params.conflict || 'rename',
       })
         .then(res => resolve(res.data))
         .catch(error => reject(error))

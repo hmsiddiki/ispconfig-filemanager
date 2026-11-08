@@ -36,7 +36,8 @@ if (! UrlJobs::validId($p['id'])) {
 }
 
 $jobs = new UrlJobs($p['user'], $p['jobs_dir']);
-$base = ['name' => basename($p['source']), 'started' => (int) ($jobs->read($p['id'])['started'] ?? time()), 'destination' => $p['destination']];
+$conflict = is_string($p['conflict'] ?? null) ? $p['conflict'] : 'rename';
+$base = ['name' => basename($p['source']), 'started' => (int) ($jobs->read($p['id'])['started'] ?? time()), 'destination' => $p['destination'], 'conflict' => $conflict];
 
 // a crash that PHP can still report (out of memory, a fatal error) must not leave the job looking alive
 register_shutdown_function(function () use ($jobs, $p, $base) {
@@ -66,7 +67,7 @@ try {
     }]);
     $storage->setPathPrefix($p['home']);
 
-    (new UnzipJob($storage, $jobs, $p['tmp_dir']))->run($p['id'], $p['source'], $p['destination']);
+    (new UnzipJob($storage, $jobs, $p['tmp_dir']))->onConflict($conflict)->run($p['id'], $p['source'], $p['destination']);
 } catch (\Throwable $e) {
     $jobs->write($p['id'], $base + ['state' => 'error', 'message' => $e instanceof \InvalidArgumentException ? $e->getMessage() : 'The unzip could not start']);
 } finally {

@@ -736,16 +736,27 @@ export default {
       return item.type == 'file' && /\.(zip|tar|tar\.gz|tgz|tar\.bz2|tbz2|tbz|tar\.xz|txz)$/i.test(item.name)
     },
     unzip(event, item) {
+      // What to do with files that are already there: keep both (the new one gets " (1)"), or replace them (for an update).
+      // Folders are always merged: an existing folder is used as it is, never copied to "folder (1)".
+      const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+      const message = '<p style="margin-bottom:.75rem">' + esc(this.lang('Unzip')) + ' <b>' + esc(item.name) + '</b> ' + esc(this.lang('here')) + '.</p>'
+        + '<p style="margin-bottom:.4rem">' + esc(this.lang('If a file already exists:')) + '</p>'
+        + '<label style="display:block;margin-bottom:.3rem;cursor:pointer"><input type="radio" name="fm-unzip-conflict" value="rename" checked> '
+        + esc(this.lang('Keep both (the new file gets a number)')) + '</label>'
+        + '<label style="display:block;cursor:pointer"><input type="radio" name="fm-unzip-conflict" value="overwrite"> '
+        + esc(this.lang('Replace the existing file')) + '</label>'
       this.$dialog.confirm({
-        message: this.lang('Are you sure you want to do this?'),
+        message: message,
         type: 'is-danger',
         cancelText: this.lang('Cancel'),
         confirmText: this.lang('Unzip'),
         onConfirm: () => {
+          const picked = document.querySelector('input[name="fm-unzip-conflict"]:checked')
           // the server unzips in the background and answers at once: a reload or a closed page does not stop it
           api.startUnzip({
             item: item.path,
             destination: this.$store.state.cwd.location,
+            conflict: picked && picked.value === 'overwrite' ? 'overwrite' : 'rename',
           })
             .then(() => {
               if (this.$refs.unzipJobs) this.$refs.unzipJobs.refresh()

@@ -78,6 +78,76 @@ $jobs->write($idr, ['state' => 'queued', 'started' => time()]);
 (new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp'))->run($idr, '/site/pack.zip', '/site/out');
 check('the existing file is untouched', file_get_contents($root . '/home/site/out/index.php') === 'MY OWN VERSION');
 check('the new copy gets a numbered name', is_file($root . '/home/site/out/index (1).php') && is_file($root . '/home/site/out/sub/deep/file (1).txt'), implode(', ', array_map('basename', glob($root . '/home/site/out/*'))));
+check('existing folders are used, never copied to "folder (1)"', array_filter(glob($root . '/home/site/out/* (*'), 'is_dir') === [],
+    implode(', ', array_map('basename', glob($root . '/home/site/out/*'))));
+check('nor nested ones', array_filter(glob($root . '/home/site/out/sub/*'), 'is_dir') === [$root . '/home/site/out/sub/deep'], implode(', ', array_map('basename', glob($root . '/home/site/out/sub/*'))));
+
+echo "== the same archive again, replacing existing files\n";
+file_put_contents($root . '/home/site/out/index.php', 'MY OWN VERSION');
+file_put_contents($root . '/home/site/out/sub/deep/file.txt', 'old');
+$before = count(glob($root . '/home/site/out/*'));
+$ido = bin2hex(random_bytes(12));
+$jobs->write($ido, ['state' => 'queued', 'started' => time()]);
+(new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp'))->onConflict('overwrite')->run($ido, '/site/pack.zip', '/site/out');
+$st = $jobs->read($ido);
+check('done', ($st['state'] ?? '') === 'done' && ($st['conflict'] ?? '') === 'overwrite', json_encode($st));
+check('existing files are replaced by the archive\'s', file_get_contents($root . '/home/site/out/index.php') === '<?php echo 1;' && file_get_contents($root . '/home/site/out/sub/deep/file.txt') === 'hello');
+check('no new numbered copies', count(glob($root . '/home/site/out/*')) === $before && ! is_file($root . '/home/site/out/index (2).php'), implode(', ', array_map('basename', glob($root . '/home/site/out/*'))));
+$odd = new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp');
+$odd->onConflict('delete-everything');
+$prop = new \ReflectionProperty(UnzipJob::class, 'conflict');
+$prop->setAccessible(true);
+check('an unknown mode falls back to keep both', $prop->getValue($odd) === 'rename');
+
+echo "== a plugin folder unzipped over its live copy (.git and empty folders already there)\n";
+@mkdir($root . '/home/site/plugins/qc/.git/hooks', 0777, true);
+@mkdir($root . '/home/site/plugins/qc/empty', 0777, true);
+file_put_contents($root . '/home/site/plugins/qc/.git/HEAD', 'old head');
+file_put_contents($root . '/home/site/plugins/qc/.git/hooks/keep.sample', 'mine');
+$pz = $root . '/home/site/qc.zip';
+$z = new ZipArchive();
+$z->open($pz, ZipArchive::CREATE);
+$z->addEmptyDir('qc/');
+$z->addEmptyDir('qc/.git/');
+$z->addEmptyDir('qc/.git/hooks/');
+$z->addEmptyDir('qc/empty/');
+$z->addFromString('qc/.git/HEAD', 'ref: refs/heads/main');
+$z->addFromString('qc/.git/hooks/pre-applypatch.sample', 'hook');
+$z->addFromString('qc/plugin.php', '<?php // v2');
+$z->close();
+foreach (['rename', 'overwrite'] as $mode) {
+    $idp = bin2hex(random_bytes(12));
+    $jobs->write($idp, ['state' => 'queued', 'started' => time()]);
+    (new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp'))->onConflict($mode)->run($idp, '/site/qc.zip', '/site/plugins');
+    $st = $jobs->read($idp);
+    $dirs = array_map('basename', array_filter(glob($root . '/home/site/plugins/qc/{,.}*', GLOB_BRACE), function ($p) { return is_dir($p) && ! in_array(basename($p), ['.', '..'], true); }));
+    sort($dirs);
+    check("$mode: done, nothing failed", ($st['state'] ?? '') === 'done' && ($st['failed'] ?? 1) === 0, json_encode($st));
+    check("$mode: only .git and empty, no \"(1)\" folders", $dirs === ['.git', 'empty'], implode(', ', $dirs));
+    check("$mode: files inside the existing .git land in it", is_file($root . '/home/site/plugins/qc/.git/hooks/pre-applypatch.sample') && is_file($root . '/home/site/plugins/qc/.git/hooks/keep.sample'));
+}
+check('overwrite replaced .git/HEAD', file_get_contents($root . '/home/site/plugins/qc/.git/HEAD') === 'ref: refs/heads/main');
+check('keep both: the extension-less HEAD got "HEAD (1)" next to it, inside .git', is_file($root . '/home/site/plugins/qc/.git/HEAD (1)'),
+    implode(', ', array_map('basename', glob($root . '/home/site/plugins/qc/.git/*'))));
+
+echo "== numbering a taken name changes only the name, never the folders\n";
+$fsn = makeStorage($root);
+foreach ([
+    'photo.jpg' => 'photo (1).jpg', 'photo (1).jpg' => 'photo (2).jpg', 'photo (9).jpg' => 'photo (10).jpg', 'HEAD' => 'HEAD (1)',
+    '.htaccess' => '.htaccess (1)', 'archive.tar.gz' => 'archive.tar (1).gz', 'folder' => 'folder (1)',
+    '/site/qc/.git/HEAD' => '/site/qc/.git/HEAD (1)', '/site/jquery.ui/LICENSE' => '/site/jquery.ui/LICENSE (1)', '/site/a.b/c.txt' => '/site/a.b/c (1).txt',
+    '/site/.git' => '/site/.git (1)',
+] as $in => $want) {
+    check('upcountName(' . $in . ')', $fsn->upcountName($in) === $want, $fsn->upcountName($in));
+}
+
+echo "== folders: new folder numbers a taken name, ensureDirectory never does\n";
+$fs = makeStorage($root);
+@mkdir($root . '/home/site/nf/taken', 0777, true);   // an existing EMPTY folder: the old recursive listing saw nothing and reused it
+$fs->createDir('/site/nf', 'taken');
+check('createDir: a taken (even empty) name gets a number', is_dir($root . '/home/site/nf/taken (1)'), implode(', ', array_map('basename', glob($root . '/home/site/nf/*'))));
+check('ensureDirectory: an existing folder is used as it is', $fs->ensureDirectory('/site/nf/taken') && ! is_dir($root . '/home/site/nf/taken (2)'));
+check('ensureDirectory: missing parents are created', $fs->ensureDirectory('/site/nf/a/b/c') && is_dir($root . '/home/site/nf/a/b/c'));
 
 echo "== cancel\n";
 $z = new ZipArchive();
