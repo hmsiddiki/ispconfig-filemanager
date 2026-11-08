@@ -2,6 +2,16 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.0
+
+- **Uploads are much faster.** Several causes, all fixed:
+  - Every upload request held the PHP session, so the pieces the browser sends side by side were handled one after the other, and every other request of the file manager waited behind them. The upload now lets go of the session first.
+  - Pieces were 1 MB, so a 1 GB file took over a thousand requests, each one starting the app and checking the scratch folder. The default is now 8 MB (an update raises the old shipped 1 MB; a value you set yourself is kept). The installer sets PHP's upload limits for the file manager's folder only, kept below the panel's nginx `client_max_body_size`, and the app lowers the piece size by itself where PHP allows less.
+  - Each piece is written straight to its place in the file, so nothing is joined together at the end (the last request used to copy the whole file once more before saving it).
+- **Leaving the File Manager tab no longer stops uploads.** The panel used to throw the file manager away, upload included, when another tab or page was opened. While uploads are running it is now kept open in the background, and a small card in the corner shows the progress with a **Show** button to go back to it. Without running uploads the tab closes as before. Closing or reloading the browser tab still stops an upload (the browser sends the file from that page), and the browser now asks before doing that.
+- **Large uploads are saved into the website in the background.** When the last piece of a file of 32 MB or more arrives, the copy into the website runs as a background job with its own progress card ("Saving the upload"), like zip and unzip. The page does not wait for it, and the web server's time limit cannot cut it off.
+- **Interrupted uploads resume.** Pieces are kept per website and per file, so adding the same file again (also after a reload) sends only the missing pieces.
+- **Delete runs in the background**, like zip and unzip. The items leave the list at once, and a progress card (counting files, then "n / m files") shows the job, with a Cancel button. Leaving, reloading or closing the page does not stop it. Deleting a large folder over FTP used to run inside the browser's request, where the web server's time limit or leaving the page could stop it half-way without saying so.
 ## 1.4.1
 
 - **The File Manager tab works on vhost subdomains and alias domains.** Their page showed "You do not have access to that website", because only websites were looked up. Such a domain has no folder tree of its own: the tab now opens the website it belongs to, in the subdomain's own folder (for example `updates` for updates.qlopy.com), or in `web` for an alias. The domain is checked with ISPConfig's own permissions, and the folder comes from the panel's database, never from the browser.

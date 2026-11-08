@@ -14,7 +14,7 @@ use Filegator\Services\Session\SessionStorageInterface as Session;
 use Filegator\Services\Storage\Filesystem;
 
 /**
- * What the background jobs (unzip, zip) share: one status file per job, one status list the browser polls for all of them, cancel, and
+ * What the background jobs (unzip, zip, delete, saving a large upload) share: one status file per job, one status list the browser polls for all of them, cancel, and
  * starting the worker process that does the work outside the browser's request.
  *
  * A job never holds the user's session: start() releases it before the work begins, so the user's other requests (and a reload of the page)
@@ -79,14 +79,21 @@ abstract class BackgroundJobController
     /** Is a job of this kind ('zip' / 'unzip') already running for this website? */
     protected function hasActive(string $kind): bool
     {
+        return $this->countActive($kind) > 0;
+    }
+
+    /** How many jobs of this kind are running for this website. */
+    protected function countActive(string $kind): int
+    {
+        $count = 0;
         foreach ($this->jobs->all() as $state) {
             $state = UnzipJob::present($state);
             if (UnzipJob::isActive($state) && UnzipJob::kindOf($state) === $kind) {
-                return true;
+                $count++;
             }
         }
 
-        return false;
+        return $count;
     }
 
     /** The encrypted FTP / SFTP login of this session, which the worker uses to reach the storage. Null when signed out. */

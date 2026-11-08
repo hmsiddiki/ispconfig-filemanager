@@ -267,6 +267,17 @@ const api = {
         .catch(error => reject(error))
     })
   },
+  // delete in the background: answers at once with a job id; progress comes through unzipStatus, which lists every job kind
+  startDelete (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('deletejob', {
+        items: params.items.map(item => ({ path: item.path, type: item.type })),
+        folder: params.folder,
+      })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
   unzipStatus (params) {
     return new Promise((resolve, reject) => {
       axios.post('unzipjob/status', { dismiss: params.dismiss || [] })

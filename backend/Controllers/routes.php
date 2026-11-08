@@ -339,8 +339,9 @@ return [
         'roles' => [
             'guest', 'user', 'admin',
         ],
+        // every job kind (also delete and upload, which need no zip permission); only the user's own jobs are ever seen
         'permissions' => [
-            'read', 'write', 'zip',
+            'read',
         ],
     ],
     [
@@ -350,8 +351,9 @@ return [
         'roles' => [
             'guest', 'user', 'admin',
         ],
+        // every job kind (also delete and upload, which need no zip permission); only the user's own jobs are ever seen
         'permissions' => [
-            'read', 'write', 'zip',
+            'read',
         ],
     ],
     // zip as a background job; its progress and cancel go through /unzipjob/status and /unzipjob/cancel, which serve every job kind
@@ -364,6 +366,18 @@ return [
         ],
         'permissions' => [
             'read', 'write', 'zip',
+        ],
+    ],
+    // delete as a background job; progress and cancel through /unzipjob/status and /unzipjob/cancel
+    [
+        'route' => [
+            'POST', '/deletejob', '\Filegator\Controllers\DeleteJobController@start',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write',
         ],
     ],
 ];

@@ -87,6 +87,8 @@ export default {
       progress: 0,
       uploadEntries: [],
       nextUploadEntryId: 1,
+      busyTimer: null,
+      lastBusyText: '',
     }
   },
   computed: {
@@ -118,6 +120,23 @@ export default {
         this.resumable.addFile(file)
       })
     },
+    activeUploads(active) {
+      this.reportBusy(true)
+      if (active) {
+        window.addEventListener('beforeunload', this.warnUnload)
+        this.busyTimer = window.setInterval(() => this.reportBusy(), 1000)
+      } else {
+        window.removeEventListener('beforeunload', this.warnUnload)
+        window.clearInterval(this.busyTimer)
+        this.busyTimer = null
+      }
+    },
+  },
+  beforeDestroy() {
+    window.removeEventListener('beforeunload', this.warnUnload)
+    window.clearInterval(this.busyTimer)
+    this.busyTimer = null
+    this.reportBusy(true, false)
   },
   mounted() {
     this.resumable = new Resumable({
@@ -129,6 +148,9 @@ export default {
       simultaneousUploads: this.$store.state.config.upload_simultaneous,
       minFileSize: 0,
       chunkSize: this.$store.state.config.upload_chunk_size,
+      // every piece at most chunkSize (by default the last one may be up to twice that, which PHP's upload limit can refuse);
+      // the server also places each piece at (number - 1) x chunkSize in the file
+      forceChunkSize: true,
       maxFileSize: this.$store.state.config.upload_max_size,
       maxFileSizeErrorCallback: (file) => {
         this.$notification.open({
@@ -188,7 +210,7 @@ export default {
       }
     })
 
-    this.resumable.on('fileSuccess', (file) => {
+    this.resumable.on('fileSuccess', (file, message) => {
       file.file.uploadingError = false
       this.updateEntry(file, {
         inProgress: false,
@@ -196,6 +218,17 @@ export default {
         isError: false,
       })
       this.$forceUpdate()
+      // a large file is copied into the website by a background job: its progress card takes over, and the list refreshes when it is done
+      let job = null
+      try {
+        job = (JSON.parse(message) || {}).data
+      } catch (e) {
+        job = null
+      }
+      if (job && job.job) {
+        this.$emit('job-started', job.job)
+        return
+      }
       if (this.can('read')) {
         api.getDir({
           to: '',
@@ -229,6 +262,33 @@ export default {
     })
   },
   methods: {
+    warnUnload(event) {
+      // the file is read from this page: closing or reloading it stops the upload (the browser shows its own wording)
+      event.preventDefault()
+      event.returnValue = ''
+      return ''
+    },
+    /**
+     * Tell the page around the file manager (the panel's File Manager tab) whether uploads are running and how far they are. That page then
+     * keeps the file manager alive when the user opens another tab or page of the panel, instead of throwing it away with the upload in it.
+     * Only a parent at the same address gets it.
+     */
+    reportBusy(force = false, busy = null) {
+      if (window.parent === window) return
+      let sameOrigin = false
+      try {
+        sameOrigin = window.parent.location.origin === window.location.origin
+      } catch (e) {
+        sameOrigin = false
+      }
+      if (!sameOrigin) return
+      const on = busy === null ? this.activeUploads : busy
+      const percent = this.resumable && this.resumable.getSize && this.resumable.getSize() > 0 ? Math.floor(this.resumable.progress() * 100) : 0
+      const text = on ? this.lang('Uploading files', percent, this.formatBytes(this.resumable.getSize())) : ''
+      if (!force && text === this.lastBusyText) return
+      this.lastBusyText = text
+      window.parent.postMessage({ type: 'filemanager-busy', busy: on, text: text, percent: percent }, window.location.origin)
+    },
     createUploadEntry({fileName, relativePath, size, retryable, resumableFile, inProgress, isComplete, isError}) {
       const entry = {
         id: this.nextUploadEntryId++,

@@ -35,7 +35,7 @@ return [
         'language' => 'english',
         'logo' => 'logo.svg',
         'upload_max_size' => 2048 * 1024 * 1024,
-        'upload_chunk_size' => 1 * 1024 * 1024, // must stay below the panel's client_max_body_size (20M by default)
+        'upload_chunk_size' => 8 * 1024 * 1024, // bigger pieces = fewer requests = faster uploads; lowered by the app itself where PHP allows less
         'upload_simultaneous' => 3,
         'default_archive_name' => 'archive.zip',
         'editable' => ['.txt', '.log', '.md', '.json', '.xml', '.yml', '.yaml', '.toml', '.ini', '.conf', '.env', '.htaccess', '.csv', '.html', '.htm', '.css', '.scss', '.less', '.js', '.mjs', '.jsx', '.ts', '.tsx', '.vue', '.php', '.py', '.sh', '.bash', '.sql', '.go', '.java', '.c', '.h', '.cpp', '.diff', '.patch', 'Dockerfile'],

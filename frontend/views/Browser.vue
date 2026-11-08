@@ -6,10 +6,10 @@
   >
     <div v-if="isLoading" id="loading" />
 
-    <Upload v-if="can('upload')" v-show="dropZone == false" :files="files" :drop-zone="dropZone" />
+    <Upload v-if="can('upload')" v-show="dropZone == false" :files="files" :drop-zone="dropZone" @job-started="refreshJobs" />
 
-    <!-- the unzip runs on the server in the background: this shows it, also after a page reload -->
-    <UnzipJobs v-if="can(['write', 'zip'])" ref="unzipJobs" @finished="loadFiles" />
+    <!-- unzip, zip, delete and saving large uploads run on the server in the background: this shows them, also after a page reload -->
+    <UnzipJobs v-if="can('read')" ref="unzipJobs" @finished="loadFiles" @deleting="onDeleting" />
 
     <b-upload v-if="dropZone && ! isLoading" multiple drag-drop>
       <b class="drop-info">{{ lang('Drop files to upload') }}</b>
@@ -276,6 +276,7 @@ export default {
       showAllEntries: false,
       showSymbolic: false,
       viewMode: this.readViewMode(),
+      deleting: {}, // paths a background delete is removing: left out of the list until it ends
     }
   },
   computed: {
@@ -523,6 +524,7 @@ export default {
       return `${prefix}${owner}${group}${others}`
     },
     filterEntries(files){
+      files = _.filter(files, file => !this.deleting[file.path])
       var filter_entries = this.$store.state.config.filter_entries
       this.hasFilteredEntries = false
       if (!this.showAllEntries && typeof filter_entries !== 'undefined' && filter_entries.length > 0){
@@ -554,6 +556,23 @@ export default {
         return filteredFiles
       }
       return files
+    },
+    refreshJobs() {
+      if (this.$refs.unzipJobs) this.$refs.unzipJobs.refresh()
+    },
+    /** The paths the running background deletes are removing (from the job list, so also after a reload). */
+    onDeleting(paths) {
+      const next = {}
+      paths.forEach(path => { next[path] = true })
+      const added = Object.keys(next).some(path => !this.deleting[path])
+      this.deleting = next
+      if (added) this.hideDeleting()
+    },
+    hideDeleting() {
+      this.$store.commit('setCwd', {
+        content: _.filter(this.$store.state.cwd.content, file => !this.deleting[file.path]),
+        location: this.$store.state.cwd.location,
+      })
     },
     loadFiles() {
       api.getDir({
@@ -871,19 +890,19 @@ export default {
         cancelText: this.lang('Cancel'),
         confirmText: this.lang('Delete'),
         onConfirm: () => {
-          this.isLoading = true
-          api.removeItems({
-            items: item ? [item] : this.getSelected(),
+          // the server deletes in the background and answers at once: the items leave the list now, a progress card follows the job,
+          // and leaving or reloading the page does not stop it
+          const items = item ? [item] : this.getSelected()
+          items.forEach(i => this.$set(this.deleting, i.path, true))
+          this.hideDeleting()
+          api.startDelete({
+            items: items,
+            folder: this.$store.state.cwd.location,
           })
-            .then((result) => {
-              this.isLoading = false
-              this.loadFiles()
-              if (result !== 'Done') {
-                this.handleError(this.lang('Unable to complete the action'))
-              }
-            })
+            .then(() => this.refreshJobs())
             .catch(error => {
-              this.isLoading = false
+              items.forEach(i => this.$delete(this.deleting, i.path))
+              this.loadFiles()
               this.handleError(error)
             })
           this.checked = []

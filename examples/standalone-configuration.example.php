@@ -27,7 +27,7 @@ return [
         'language' => 'english',
         'logo' => 'logo.svg',
         'upload_max_size' => 2048 * 1024 * 1024, // 2GB per file (uploads are sent in chunks, so PHP's upload_max_filesize does not limit this)
-        'upload_chunk_size' => 1 * 1024 * 1024, // 1MB
+        'upload_chunk_size' => 8 * 1024 * 1024, // 8MB per request; lowered automatically to fit PHP's upload_max_filesize / post_max_size
         'upload_simultaneous' => 3,
         'default_archive_name' => 'archive.zip',
         'editable' => ['.txt', '.log', '.md', '.json', '.xml', '.yml', '.yaml', '.toml', '.ini', '.conf', '.env', '.htaccess', '.csv', '.html', '.htm', '.css', '.scss', '.less', '.js', '.mjs', '.jsx', '.ts', '.tsx', '.vue', '.php', '.py', '.sh', '.bash', '.sql', '.go', '.java', '.c', '.h', '.cpp', '.diff', '.patch', 'Dockerfile'],

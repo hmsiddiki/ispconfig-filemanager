@@ -55,6 +55,29 @@ class UrlJobs
         return null;
     }
 
+    /**
+     * Like acquire(), but wait for a slot instead of giving up: a job that is already accepted queues behind the others. $beat() is called
+     * every few seconds while waiting (to keep the job's status file fresh). Returns null only when $timeout seconds pass without a slot.
+     *
+     * @return resource|null
+     */
+    public function acquireWaiting(string $scope, int $max, int $timeout, callable $beat)
+    {
+        $until = time() + $timeout;
+        $next_beat = 0;
+        while (true) {
+            $slot = $this->acquire($scope, $max);
+            if ($slot || time() >= $until) {
+                return $slot;
+            }
+            if (time() >= $next_beat) {
+                $beat();
+                $next_beat = time() + 10;
+            }
+            usleep(500000);
+        }
+    }
+
     public function release($handle): void
     {
         if (is_resource($handle)) {

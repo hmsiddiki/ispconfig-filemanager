@@ -193,8 +193,10 @@ Edit `/usr/local/ispconfig/filemanager/configuration.php` (changes apply immedia
 | `url_upload.enabled` / `max_size` / `timeout` | "Upload from URL": on/off, size limit per file (default 200 MB), time limit |
 | `url_upload.max_concurrent_per_user` / `max_concurrent_total` | downloads at once (default 1 per person, 3 on the server) |
 | `start_folder` | optional: the folder the File Manager tab opens in (default `'web'`, the website's document root; a site without it opens its home folder). `''` opens the home folder |
-| `unzip_php_cli` | optional: full path of the command-line PHP used for the background zip and unzip workers (default: found next to the PHP the panel runs on) |
+| `unzip_php_cli` | optional: full path of the command-line PHP used for the background workers (zip, unzip, delete, saving large uploads) (default: found next to the PHP the panel runs on) |
 | `frontend_config.upload_max_size` | upload size limit per file, checked in the browser and again on the server (default 2 GB; uploads are sent in chunks, so PHP's `upload_max_filesize` does not apply) |
+| `frontend_config.upload_chunk_size` | size of each upload piece (default 8 MB). Bigger pieces mean fewer requests and faster uploads. The app lowers it by itself where PHP's `upload_max_filesize` / `post_max_size` allow less; the installer sets those for the file manager's folder only, below the panel's nginx `client_max_body_size` |
+| `frontend_config.upload_simultaneous` | how many pieces are sent at the same time (default 3) |
 | `frontend_config.editable` | file types that open in the code editor |
 
 The session length (default 8 hours) is set at install time with `--ttl-hours`; re-run the installer to change it.

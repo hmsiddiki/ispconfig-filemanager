@@ -55,16 +55,21 @@ class UnzipJob
         return preg_match('/\.(tar|tar\.gz|tgz|tar\.bz2|tbz2|tbz|tar\.xz|txz)$/', $name) === 1 ? 'tar' : null;
     }
 
-    /** Running states of every background job kind: unzip (copying, extracting) and zip (listing, zipping, uploading). */
+    /**
+     * Running states of every background job kind: unzip (copying, extracting), zip (listing, zipping, uploading), delete (listing, deleting)
+     * and the last step of a large upload (storing).
+     */
     public static function isActive(array $state): bool
     {
-        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading'], true);
+        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading', 'deleting', 'storing'], true);
     }
 
-    /** 'unzip' or 'zip' (jobs written before zip jobs existed have no kind: they are unzips). */
+    /** 'unzip', 'zip', 'delete' or 'upload' (jobs written before zip jobs existed have no kind: they are unzips). */
     public static function kindOf(array $state): string
     {
-        return ($state['kind'] ?? 'unzip') === 'zip' ? 'zip' : 'unzip';
+        $kind = $state['kind'] ?? 'unzip';
+
+        return in_array($kind, ['zip', 'delete', 'upload'], true) ? $kind : 'unzip';
     }
 
     /** The state as the browser should see it: a job that is "running" but silent for too long has died. */
@@ -72,9 +77,12 @@ class UnzipJob
     {
         if (self::isActive($state) && time() - (int) ($state['updated'] ?? 0) > self::STALL_AFTER) {
             $state['state'] = 'error';
-            $state['message'] = self::kindOf($state) === 'zip'
-                ? 'The zip stopped unexpectedly. Nothing was saved.'
-                : 'The unzip stopped unexpectedly. Files extracted so far were kept.';
+            $state['message'] = [
+                'zip' => 'The zip stopped unexpectedly. Nothing was saved.',
+                'unzip' => 'The unzip stopped unexpectedly. Files extracted so far were kept.',
+                'delete' => 'The delete stopped unexpectedly. Some items may not have been deleted.',
+                'upload' => 'Saving the upload stopped unexpectedly. Upload the file again.',
+            ][self::kindOf($state)];
         }
         $state['kind'] = self::kindOf($state);
 

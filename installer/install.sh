@@ -190,7 +190,34 @@ else
         sed -i "s/\('upload_max_size' => \)100 \* 1024 \* 1024,/\12048 * 1024 * 1024,/" "$FM_HOME/configuration.php"
         ok "upload limit raised from the old 100 MB default to the new 2 GB default (a value you set yourself is never changed)"
     fi
+    # The upload piece size used to ship as 1 MB: many small requests, which made uploads slow. The shipped value moves to 8 MB; a value you
+    # set yourself is left alone. (The app makes it smaller by itself where PHP's limits are lower.)
+    if grep -q "'upload_chunk_size' => 1 \* 1024 \* 1024," "$FM_HOME/configuration.php"; then
+        sed -i "s|\('upload_chunk_size' => \)1 \* 1024 \* 1024,.*|\18 * 1024 * 1024, // bigger pieces = fewer requests = faster uploads; lowered by the app itself where PHP allows less|" "$FM_HOME/configuration.php"
+        ok "upload piece size raised from the old 1 MB default to 8 MB (faster uploads)"
+    fi
 fi
+
+# PHP limits for the app's own folder only, big enough for one upload piece (the panel's PHP keeps its own limits everywhere else). Kept below
+# the panel's nginx client_max_body_size (read from its vhost), which every upload request has to pass first.
+BODY_MAX_MB=20
+for vhost in /etc/nginx/sites-enabled/000-ispconfig.vhost /etc/nginx/sites-available/ispconfig.vhost; do
+    [ -f "$vhost" ] || continue
+    body="$(grep -m1 -oiE '^[[:space:]]*client_max_body_size[[:space:]]+[0-9]+[mMkKgG]?' "$vhost" | awk '{print $2}' || true)"
+    case "$body" in
+        *[gG]) BODY_MAX_MB=$(( ${body%[gG]} * 1024 )) ;;
+        *[mM]) BODY_MAX_MB=${body%[mM]} ;;
+        *[kK]) BODY_MAX_MB=$(( ${body%[kK]} / 1024 )) ;;
+        [0-9]*) BODY_MAX_MB=$(( body / 1048576 )) ;;
+    esac
+    break
+done
+PIECE_MAX_MB=16
+if [ "$BODY_MAX_MB" -gt 0 ] && [ $((BODY_MAX_MB - 2)) -lt "$PIECE_MAX_MB" ]; then PIECE_MAX_MB=$((BODY_MAX_MB - 2)); fi
+[ "$PIECE_MAX_MB" -ge 1 ] || PIECE_MAX_MB=1
+printf '; written by install.sh: PHP limits for the file manager only (one upload piece per request)\nupload_max_filesize = %sM\npost_max_size = %sM\n' \
+    "$PIECE_MAX_MB" "$((PIECE_MAX_MB + 1))" > "$WEB_DIR/app/.user.ini"
+ok "PHP limits for the file manager's folder: upload pieces up to ${PIECE_MAX_MB} MB"
 
 sed -e "s|@FM_HOME@|$FM_HOME|g" -e "s|@FM_DATA@|$FM_DATA|g" "$PKG/app/index.php.tpl" > "$WEB_DIR/app/index.php"
 sed -e "s|@FM_HOME@|$FM_HOME|g" -e "s|@FM_APP_URL@|$APP_URL|g" -e "s|@FM_ACCOUNT_TTL@|$((TTL_HOURS * 3600))|g" \
