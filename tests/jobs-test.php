@@ -137,8 +137,9 @@ echo "== waiting slot\n";
 $held = $jobs->acquire('t-slot', 1);
 $beats = 0;
 $t = microtime(true);
-$got = $jobs->acquireWaiting('t-slot', 1, 1, function () use (&$beats) { $beats++; });
-check('times out while the slot is held', $got === null && microtime(true) - $t >= 0.9);
+// the timeout is counted in whole seconds: 2 means at least 1 full second has passed, whenever the clock ticks over
+$got = $jobs->acquireWaiting('t-slot', 1, 2, function () use (&$beats) { $beats++; });
+check('times out while the slot is held', $got === null && microtime(true) - $t >= 1.0);
 check('status kept fresh while waiting', $beats >= 1);
 $jobs->release($held);
 $got = $jobs->acquireWaiting('t-slot', 1, 5, function () {});
