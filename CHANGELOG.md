@@ -2,6 +2,11 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.5
+
+- **A delete no longer reports files as deleted when the server refused them.** After a failed delete it used to ask the server whether the file was still there; a server can refuse that question for the same reason it refused the delete, and a refused question looked like "not there". Pure-FTPd, ISPConfig's FTP server, refuses every file name that contains `\` ("553 Prohibited file name") for both, so such files were shown as deleted and came back when the list reloaded. Now only the delete command's own answer counts: a file found by listing its folder that cannot be deleted is reported as failed, and a file picked in the list counts as already gone only when its folder's listing no longer shows it.
+- When files with `\` in their name could not be deleted, the result says why: *The FTP server refuses file names that contain "\". Remove those files over SSH or with the hosting panel.* Such files cannot be deleted, renamed or moved over FTP on a Pure-FTPd server at all.
+
 ## 1.5.4
 
 - **The version number is shown** in a small, faint tag in the bottom right corner (`v1.5.4`), so after an update it is easy to see which version the page runs. A page opened before an update keeps showing the old number until it is reloaded.

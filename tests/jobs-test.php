@@ -103,6 +103,42 @@ $id = newJob($jobs, 'delete');
 $st = $jobs->read($id);
 check('missing file counts as deleted', ($st['state'] ?? '') === 'done' && ($st['failed'] ?? 1) === 0, json_encode($st));
 
+echo "== a server that refuses some names (as Pure-FTPd refuses names holding \"\\\": the delete and the existence question alike)\n";
+$refusing = function (string $word) use ($root) {
+    $fs = new Filesystem();
+    $fs->init(['separator' => '/', 'config' => [], 'adapter' => function () use ($root, $word) {
+        return new class($root . '/home', $word) extends Local {
+            private $word;
+            public function __construct($root, $word) { parent::__construct($root); $this->word = $word; }
+            public function deleteNow($path): bool { return strpos($path, $this->word) === false && @unlink($this->applyPathPrefix($path)); }
+            public function has($path) { return strpos($path, $this->word) === false && parent::has($path); }
+        };
+    }]);
+    $fs->setPathPrefix('/');
+
+    return $fs;
+};
+mkdir($web . '/rf/sub', 0777, true);
+file_put_contents($web . '/rf/refused-a.txt', 'x');
+file_put_contents($web . '/rf/fine.txt', 'x');
+file_put_contents($web . '/rf/sub/refused-b.txt', 'x');
+file_put_contents($web . '/rf/sub/fine2.txt', 'x');
+$id = newJob($jobs, 'delete');
+(new DeleteJob($refusing('refused'), $jobs))->run($id, [['path' => '/site/web/rf/refused-a.txt', 'type' => 'file'], ['path' => '/site/web/rf/fine.txt', 'type' => 'file'],
+    ['path' => '/site/web/rf/sub', 'type' => 'dir'], ['path' => '/site/web/rf/never-there.txt', 'type' => 'file']], '/site/web/rf');
+$st = $jobs->read($id);
+check('a refused picked file is reported as failed, not deleted', is_file($web . '/rf/refused-a.txt') && in_array('site/web/rf/refused-a.txt', $st['errors'] ?? [], true), json_encode($st));
+// (the folder step then falls back to the full deleteDir(); this local stand-in removes the folder there, an FTP server that refuses the
+// name refuses that too and the folder stays)
+check('a refused file inside a picked folder is reported as failed', in_array('site/web/rf/sub/refused-b.txt', $st['errors'] ?? [], true), json_encode($st));
+check('the others are deleted, and a picked file that was never there still counts as gone', ! is_file($web . '/rf/fine.txt') && ! is_file($web . '/rf/sub/fine2.txt')
+    && ($st['files'] ?? 0) === 3 && ($st['failed'] ?? 0) >= 2 && ($st['state'] ?? '') === 'done', json_encode($st));
+check('no "\\" in those names: no note about it', ! isset($st['note']), json_encode($st));
+$id = newJob($jobs, 'delete');
+(new DeleteJob($refusing('refused'), $jobs))->run($id, [['path' => '/site/web/rf/refused-a.txt', 'type' => 'file']], '/site/web/rf');
+$st = $jobs->read($id);
+check('when nothing could be deleted the job says so', ($st['state'] ?? '') === 'error' && strpos((string) ($st['message'] ?? ''), 'Nothing could be deleted') !== false, json_encode($st));
+
 echo "== paths: \"\\\" is part of a name, \"..\" is never allowed\n";
 foreach ([
     'a/b\\c.txt' => 'a/b\\c.txt', '/web//admin\\x.php/' => 'web/admin\\x.php', './a/./b' => 'a/b', 'a\\' => 'a\\', '' => '',
@@ -150,6 +186,13 @@ if (DIRECTORY_SEPARATOR === '/') {
     (new TransferJob($bs, $jobs))->run($id, 'copy', [['path' => '/site/web/bs/to', 'type' => 'dir']], '/site/web/bs/keep2', '/site/web/bs');
     check('copy of a folder holding one keeps the "\\"', file_exists($web . '/bs/keep2/to/renamed\\b.php'), json_encode($jobs->read($id)));
     check('a file with "\\" is seen as existing', $bs->fileExists('/site/web/bs/keep.txt') && $bs->fileExists('/site/web/bs/to/renamed\\b.php') && ! $bs->fileExists('/site/web/bs/to/renamed/b.php'));
+    // a server that refuses every name with "\" (Pure-FTPd): the delete fails, is reported, and the result explains why
+    file_put_contents($web . '/bs/admin\\c.php', 'x');
+    $id = newJob($jobs, 'delete');
+    (new DeleteJob($refusing('\\'), $jobs))->run($id, [['path' => '/site/web/bs/admin\\c.php', 'type' => 'file'], ['path' => '/site/web/bs/keep.txt', 'type' => 'file']], '/site/web/bs');
+    $st = $jobs->read($id);
+    check('a refused "\\" name is failed, kept, and the note says why', file_exists($web . '/bs/admin\\c.php') && ! file_exists($web . '/bs/keep.txt')
+        && ($st['failed'] ?? 0) === 1 && ($st['note'] ?? '') === DeleteJob::NOTE_BACKSLASH, json_encode($st));
 } else {
     echo "== files with \"\\\" in their name: skipped on Windows (there \"\\\" is a folder separator); CI runs them on Linux\n";
 }

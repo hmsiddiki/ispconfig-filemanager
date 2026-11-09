@@ -26,6 +26,15 @@ class DeleteJob
 
     protected $last = 0.0;
 
+    /** @var array<string, true> files the user picked themselves (not found by listing a folder) */
+    protected $picked = [];
+
+    /** @var array<string, array<string, true>|null> folder => the names its listing shows (null: the listing failed) */
+    protected $listed = [];
+
+    /** Shown when the FTP server refuses names holding "\" (Pure-FTPd does; zips made on Windows and some tools leave such files). */
+    public const NOTE_BACKSLASH = 'The FTP server refuses file names that contain "\". Remove those files over SSH or with the hosting panel.';
+
     public function __construct(Filesystem $storage, UrlJobs $jobs)
     {
         $this->storage = $storage;
@@ -66,6 +75,7 @@ class DeleteJob
         $done = 0;
         $failed = 0;
         $errors = [];
+        $note = null;
 
         try {
             [$files, $dirs, $tops] = $this->collect($id, $items, $base);
@@ -77,6 +87,9 @@ class DeleteJob
                     $done++;
                 } else {
                     $failed++;
+                    if (strpos($file, '\\') !== false) {
+                        $note = self::NOTE_BACKSLASH;
+                    }
                     if (count($errors) < 5) {
                         $errors[] = ltrim($file, '/');
                     }
@@ -106,9 +119,9 @@ class DeleteJob
             }
 
             if ($failed > 0 && $done === 0 && $total > 0) {
-                throw new \InvalidArgumentException('Nothing could be deleted: ' . implode(', ', $errors));
+                throw new \InvalidArgumentException('Nothing could be deleted: ' . implode(', ', $errors) . ($note !== null ? '. ' . $note : ''));
             }
-            $this->jobs->write($id, $base + ['state' => 'done', 'files' => $done, 'failed' => $failed, 'errors' => $errors]);
+            $this->jobs->write($id, $base + ['state' => 'done', 'files' => $done, 'failed' => $failed, 'errors' => $errors] + ($note !== null ? ['note' => $note] : []));
         } catch (\InvalidArgumentException $e) {
             $cancelled = $e->getMessage() === 'Delete cancelled';
             $this->jobs->write($id, $base + ['state' => $cancelled ? 'cancelled' : 'error', 'message' => $e->getMessage(), 'files' => $done]);
@@ -136,6 +149,7 @@ class DeleteJob
             }
             if (($item['type'] ?? '') === 'file') {
                 $files[] = $path;
+                $this->picked[$path] = true;
                 continue;
             }
 
@@ -173,15 +187,48 @@ class DeleteJob
     }
 
     /** One request per file (deleteFileNow); a file that is already gone counts as deleted. */
+    /**
+     * One delete command per file. When it fails, the server is not asked "is it still there?": it can refuse that question too (Pure-FTPd
+     * does for names holding "\"), and a refused question looks like "not there", which made refused files count as deleted. Instead:
+     * a file found by listing its folder was there a moment ago, so it failed; a file the user picked counts as already deleted only
+     * when its folder's listing (taken once per folder) no longer shows it.
+     */
     protected function deleteFile(string $path): bool
     {
         try {
-            return $this->storage->deleteFileNow($path);
+            if ($this->storage->deleteFileOnce($path)) {
+                return true;
+            }
         } catch (FileNotFoundException $e) {
-            return true;   // already gone
+            // already gone, or refused: decided below
         } catch (\Throwable $e) {
             return false;
         }
+
+        return isset($this->picked[$path]) && ! $this->inListing($path);
+    }
+
+    /** Does the listing of $path's folder show it? Listed once per folder; when the listing fails the answer is yes (do not claim it is gone). */
+    protected function inListing(string $path): bool
+    {
+        $slash = (int) strrpos($path, '/');
+        $parent = $slash > 0 ? substr($path, 0, $slash) : '/';
+        $name = substr($path, $slash + 1);
+        if (! array_key_exists($parent, $this->listed)) {
+            $names = [];
+            try {
+                foreach ($this->storage->getDirectoryCollection($parent)->all() as $child) {
+                    if (($child['type'] ?? '') !== 'back') {
+                        $names[(string) substr(strrchr('/' . (string) $child['path'], '/'), 1)] = true;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $names = null;
+            }
+            $this->listed[$parent] = $names;
+        }
+
+        return $this->listed[$parent] === null || isset($this->listed[$parent][$name]);
     }
 
     /** Write progress at most twice a second, and stop when the user cancelled. */

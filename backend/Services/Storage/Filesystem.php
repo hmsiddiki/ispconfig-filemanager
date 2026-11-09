@@ -189,6 +189,25 @@ class Filesystem implements Service
     }
 
     /**
+     * One delete command and nothing else: true only when the storage says the file was deleted. No "is it still there?" question
+     * afterwards, because a server can refuse that question for the same reason it refused the delete (Pure-FTPd refuses every name
+     * holding "\" with "553 Prohibited file name", for DELE and for LIST alike), and a refused question looks like "not there".
+     */
+    public function deleteFileOnce(string $path): bool
+    {
+        $p = self::cleanPath($this->applyPathPrefix($path));
+        $adapter = $this->storage->getAdapter();
+        if (method_exists($adapter, 'deleteNow')) {
+            return (bool) $adapter->deleteNow($p);
+        }
+        if ($adapter instanceof \League\Flysystem\Adapter\Local) {
+            return @unlink($adapter->applyPathPrefix($p));
+        }
+
+        return (bool) $adapter->delete($p);
+    }
+
+    /**
      * Delete a file with one request to the storage (background jobs, which delete many). deleteFile() asks first whether the file is
      * there, over FTP a CWD and a LIST with a data connection of its own. Only when the delete fails is that question asked, so a file
      * that was already gone still counts as deleted. True when the file is gone.

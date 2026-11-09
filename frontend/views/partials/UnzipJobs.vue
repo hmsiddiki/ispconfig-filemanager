@@ -108,6 +108,10 @@
       <p v-if="job.state === 'done' && job.errors && job.errors.length" class="fs-unzip-current">
         {{ job.errors.join(', ') }}
       </p>
+      <!-- why some items could not be done (for example an FTP server that refuses names with "\") -->
+      <p v-if="job.state === 'done' && job.note" class="fs-unzip-line has-text-danger">
+        {{ lang(job.note) }}
+      </p>
     </div>
   </div>
 </template>
