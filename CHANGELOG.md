@@ -2,6 +2,10 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.4
+
+- **The version number is shown** in a small, faint tag in the bottom right corner (`v1.5.4`), so after an update it is easy to see which version the page runs. A page opened before an update keeps showing the old number until it is reloaded.
+
 ## 1.5.3
 
 - **Files with `\` in their name can be deleted, renamed, moved and copied.** On the Linux servers ISPConfig runs on, `\` is an ordinary character of a file name, and a zip made on Windows can leave many such files (`admin\x.php`). The storage library turned every `\` into `/` on the way to the server, so it asked for `admin/x.php`, which does not exist: the file could not be deleted, renamed or moved, and a delete even reported it as deleted. Over FTP each of those failed deletes also cost the slowest path (a failed delete, then a `CWD` and a `LIST`). Paths now keep `\` as part of the name; `..` is still refused, also between backslashes.

@@ -7,6 +7,7 @@
     <div v-else id="inner">
       <router-view />
     </div>
+    <span v-if="version" class="fs-version" :title="'ISPConfig File Manager ' + version">v{{ version }}</span>
   </div>
 </template>
 
@@ -16,7 +17,14 @@ import ThemeToggle from './views/partials/ThemeToggle'
 
 export default {
   name: 'App',
-  components: { Login, ThemeToggle }
+  components: { Login, ThemeToggle },
+  data() {
+    return {
+      // set at build time from package.json (vue.config.js)
+      /* eslint-disable-next-line */
+      version: process.env.VUE_APP_VERSION || '',
+    }
+  },
 }
 </script>
 
@@ -37,4 +45,17 @@ export default {
 
 /* Code editor theme */
 @import "assets/scss/theme/editor";
+
+/* The release number in the bottom right corner: small and faint, under the job cards (z-index 40) */
+.fs-version {
+  position: fixed;
+  right: 0.5rem;
+  bottom: 0.3rem;
+  z-index: 30;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
 </style>
