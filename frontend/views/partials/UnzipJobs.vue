@@ -24,8 +24,28 @@
         <template v-if="job.state === 'queued'">
           {{ lang('Starting...') }}
         </template>
-        <template v-else-if="job.state === 'listing' && job.kind === 'delete'">
+        <template v-else-if="job.state === 'listing' && (job.kind === 'delete' || job.kind === 'copy')">
           {{ lang('Counting files') }}: {{ (job.files || 0).toLocaleString() }}
+        </template>
+        <template v-else-if="job.state === 'transferring'">
+          {{ lang('Copying') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('files') }}<template v-if="job.bytes">, {{ formatBytes(job.bytes, 0) }}</template>
+          <span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'moving'">
+          {{ lang('Moving') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('items') }}
+          <span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'done' && job.kind === 'copy'">
+          {{ lang('Copied') }}: {{ (job.files || 0).toLocaleString() }} {{ lang('files') }}<template v-if="job.bytes">, {{ formatBytes(job.bytes, 1) }}</template><span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'done' && job.kind === 'move'">
+          {{ lang('Moved') }}: {{ (job.files || 0).toLocaleString() }} {{ lang('items') }}<span v-if="job.failed"> ({{ job.failed }} {{ lang('failed') }})</span>
+        </template>
+        <template v-else-if="job.state === 'cancelled' && job.kind === 'copy'">
+          {{ lang('Copy cancelled') }}. {{ lang('Files copied so far were kept.') }}
+        </template>
+        <template v-else-if="job.state === 'cancelled' && job.kind === 'move'">
+          {{ lang('Move cancelled') }}. {{ lang('Items moved so far stay moved.') }}
         </template>
         <template v-else-if="job.state === 'deleting'">
           {{ lang('Deleting') }}: {{ (job.done || 0).toLocaleString() }} / {{ (job.total || 0).toLocaleString() }} {{ lang('files') }}
@@ -82,7 +102,7 @@
           {{ lang(job.message || 'Unknown error') }}
         </template>
       </p>
-      <p v-if="(job.state === 'extracting' || job.state === 'zipping' || job.state === 'deleting') && job.current" class="fs-unzip-current">
+      <p v-if="['extracting', 'zipping', 'deleting', 'transferring', 'moving'].indexOf(job.state) !== -1 && job.current" class="fs-unzip-current">
         {{ job.current }}
       </p>
       <p v-if="job.state === 'done' && job.errors && job.errors.length" class="fs-unzip-current">
@@ -127,13 +147,13 @@ export default {
   },
   methods: {
     isActive(job) {
-      return ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading', 'deleting', 'storing'].indexOf(job.state) !== -1
+      return ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading', 'deleting', 'storing', 'transferring', 'moving'].indexOf(job.state) !== -1
     },
     title(job) {
-      return this.lang({ zip: 'Zip', delete: 'Delete', upload: 'Upload' }[job.kind] || 'Unzip')
+      return this.lang({ zip: 'Zip', delete: 'Delete', upload: 'Upload', copy: 'Copy', move: 'Move' }[job.kind] || 'Unzip')
     },
     percent(job) {
-      if (job.state === 'deleting' && job.total > 0) return Math.min(99, Math.floor(((job.done || 0) / job.total) * 100))
+      if ((job.state === 'deleting' || job.state === 'transferring' || job.state === 'moving') && job.total > 0) return Math.min(99, Math.floor(((job.done || 0) / job.total) * 100))
       if (job.state === 'storing' && job.size > 0) return Math.min(99, Math.floor(((job.bytes || 0) / job.size) * 100))
       if (job.state === 'copying' && job.total > 0) return Math.min(99, Math.floor(((job.bytes || 0) / job.total) * 100))
       if (job.state === 'extracting' && job.total > 0) return Math.min(99, Math.floor(((job.done || 0) / job.total) * 100))
@@ -189,8 +209,8 @@ export default {
         }
       })
       this.jobs = list.filter(job => !this.hidden(job))
-      // what the running deletes are removing: the file list leaves those out until the delete ends
-      this.$emit('deleting', _.flatten(list.filter(job => job.kind === 'delete' && this.isActive(job)).map(job => job.paths || [])))
+      // what the running deletes are removing and the running moves are taking away: the file list leaves those out until the job ends
+      this.$emit('deleting', _.flatten(list.filter(job => (job.kind === 'delete' || job.kind === 'move') && this.isActive(job)).map(job => job.paths || [])))
       if (active) this.start()
       else this.stop()
     },
@@ -203,7 +223,7 @@ export default {
     },
     finished(job) {
       if (job.state === 'done') {
-        this.$toast.open({ message: this.lang({ zip: 'Zipped', delete: 'Deleted', upload: 'Uploaded' }[job.kind] || 'Unzipped'), type: 'is-success' })
+        this.$toast.open({ message: this.lang({ zip: 'Zipped', delete: 'Deleted', upload: 'Uploaded', copy: 'Copied', move: 'Moved' }[job.kind] || 'Unzipped'), type: 'is-success' })
         this.closeTimers[job.id] = window.setTimeout(() => this.dismiss(job), AUTO_CLOSE_MS)
       } else {
         this.closeTimers[job.id] = 0

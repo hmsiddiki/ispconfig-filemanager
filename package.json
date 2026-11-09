@@ -1,6 +1,6 @@
 {
     "name": "ispconfig-filemanager-frontend",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "private": true,
     "scripts": {
         "build": "vue-cli-service build --no-clean",

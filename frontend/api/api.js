@@ -279,6 +279,19 @@ const api = {
         .catch(error => reject(error))
     })
   },
+  // copy or move in the background (kind: 'copy' | 'move'): answers at once with a job id; progress comes through unzipStatus
+  startTransfer (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('transferjob', {
+        kind: params.kind,
+        items: params.items.map(item => ({ path: item.path, type: item.type })),
+        destination: params.destination,
+        folder: params.folder,
+      })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
   unzipStatus (params) {
     return new Promise((resolve, reject) => {
       axios.post('unzipjob/status', { dismiss: params.dismiss || [] })

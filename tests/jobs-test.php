@@ -9,6 +9,7 @@ use Filegator\Services\Archiver\UnzipJob;
 use Filegator\Services\Remote\UrlJobs;
 use Filegator\Services\Storage\DeleteJob;
 use Filegator\Services\Storage\Filesystem;
+use Filegator\Services\Storage\TransferJob;
 use Filegator\Services\Storage\UploadJob;
 use League\Flysystem\Adapter\Local;
 
@@ -101,6 +102,87 @@ $id = newJob($jobs, 'delete');
 (new DeleteJob($storage, $jobs))->run($id, [['path' => '/site/web/nope.txt', 'type' => 'file']], '/site/web');
 $st = $jobs->read($id);
 check('missing file counts as deleted', ($st['state'] ?? '') === 'done' && ($st['failed'] ?? 1) === 0, json_encode($st));
+
+echo "== delete leaves a folder that still holds something the listing did not show to the full deleteDir()\n";
+check('removeEmptyDir on a non-empty folder still removes it (fallback)', (function () use ($storage, $web) {
+    mkdir($web . '/notempty/inner', 0777, true);
+    file_put_contents($web . '/notempty/inner/x', 'x');
+    return $storage->removeEmptyDir('/site/web/notempty') && ! is_dir($web . '/notempty');
+})());
+check('deleteFileNow: deleted, and a missing file counts as gone', (function () use ($storage, $web) {
+    file_put_contents($web . '/gone.txt', 'x');
+    return $storage->deleteFileNow('/site/web/gone.txt') && ! is_file($web . '/gone.txt') && $storage->deleteFileNow('/site/web/gone.txt');
+})());
+check('typeOf: file, folder, nothing', $storage->typeOf('/site/web/keep/k.txt') === 'file' && $storage->typeOf('/site/web/keep') === 'dir' && $storage->typeOf('/site/web/nope') === null);
+
+echo "== copy\n";
+mkdir($web . '/src/sub/deeper', 0777, true);
+mkdir($web . '/src/emptydir', 0777, true);
+mkdir($web . '/dst', 0777, true);
+file_put_contents($web . '/src/a.txt', 'A');
+file_put_contents($web . '/src/sub/b.txt', 'B');
+file_put_contents($web . '/src/sub/deeper/c.bin', str_repeat("\x00\xff", 5000));
+file_put_contents($web . '/loose.txt', 'loose');
+$id = newJob($jobs, 'copy');
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/src', 'type' => 'dir'], ['path' => '/site/web/loose.txt', 'type' => 'file']], '/site/web/dst', '/site/web');
+$st = $jobs->read($id);
+check('copy done', ($st['state'] ?? '') === 'done' && ($st['kind'] ?? '') === 'copy', json_encode($st));
+check('all files copied', ($st['files'] ?? 0) === 4 && ($st['failed'] ?? -1) === 0, json_encode($st));
+check('tree copied with its contents', file_get_contents($web . '/dst/src/a.txt') === 'A' && file_get_contents($web . '/dst/src/sub/b.txt') === 'B'
+    && file_get_contents($web . '/dst/src/sub/deeper/c.bin') === str_repeat("\x00\xff", 5000));
+check('empty folder copied too', is_dir($web . '/dst/src/emptydir'));
+check('single file copied', file_get_contents($web . '/dst/loose.txt') === 'loose');
+check('sources untouched', is_file($web . '/src/sub/deeper/c.bin') && is_file($web . '/loose.txt'));
+check('bytes counted', ($st['bytes'] ?? 0) === 1 + 1 + 10000 + 5, json_encode($st));
+
+$id = newJob($jobs, 'copy');
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/src', 'type' => 'dir'], ['path' => '/site/web/loose.txt', 'type' => 'file']], '/site/web/dst', '/site/web');
+$st = $jobs->read($id);
+check('copying again: the taken names get a number, nothing is overwritten', is_dir($web . '/dst/src (1)') && is_file($web . '/dst/src (1)/sub/deeper/c.bin')
+    && file_get_contents($web . '/dst/loose (1).txt') === 'loose' && file_get_contents($web . '/dst/src/a.txt') === 'A',
+    implode(', ', array_map('basename', glob($web . '/dst/*'))));
+$id = newJob($jobs, 'copy');
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/loose.txt', 'type' => 'file']], '/site/web', '/site/web');
+check('a copy into the same folder gets a numbered name', file_get_contents($web . '/loose (1).txt') === 'loose');
+
+$id = newJob($jobs, 'copy');
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/src', 'type' => 'dir']], '/site/web/src/sub', '/site/web');
+$st = $jobs->read($id);
+check('a folder is never copied into itself', ($st['state'] ?? '') === 'error' && strpos((string) ($st['message'] ?? ''), 'into itself') !== false && ! is_dir($web . '/src/sub/src'), json_encode($st));
+
+$id = newJob($jobs, 'copy');
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/../etc', 'type' => 'dir']], '/site/web/dst', '/site/web');
+$st = $jobs->read($id);
+check('climbing paths are refused', ($st['state'] ?? '') !== 'done' || ($st['files'] ?? 0) === 0, json_encode($st));
+
+$id = newJob($jobs, 'copy');
+$jobs->requestCancel($id);
+(new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/src', 'type' => 'dir']], '/site/web/keep', '/site/web');
+$st = $jobs->read($id);
+check('copy cancel', ($st['state'] ?? '') === 'cancelled' && ! is_file($web . '/keep/src/a.txt'), json_encode($st));
+
+echo "== move\n";
+mkdir($web . '/mv/inner', 0777, true);
+file_put_contents($web . '/mv/inner/m.txt', 'M');
+file_put_contents($web . '/mvfile.txt', 'F');
+file_put_contents($web . '/dst/mvfile.txt', 'already there');
+$id = newJob($jobs, 'move');
+(new TransferJob($storage, $jobs))->run($id, 'move', [['path' => '/site/web/mv', 'type' => 'dir'], ['path' => '/site/web/mvfile.txt', 'type' => 'file']], '/site/web/dst', '/site/web');
+$st = $jobs->read($id);
+check('move done', ($st['state'] ?? '') === 'done' && ($st['kind'] ?? '') === 'move' && ($st['files'] ?? 0) === 2, json_encode($st));
+check('folder moved with its contents', ! is_dir($web . '/mv') && file_get_contents($web . '/dst/mv/inner/m.txt') === 'M');
+check('a taken name gets a number, the existing file is kept', file_get_contents($web . '/dst/mvfile.txt') === 'already there' && file_get_contents($web . '/dst/mvfile (1).txt') === 'F' && ! is_file($web . '/mvfile.txt'));
+$id = newJob($jobs, 'move');
+(new TransferJob($storage, $jobs))->run($id, 'move', [['path' => '/site/web/dst/mv', 'type' => 'dir']], '/site/web/dst', '/site/web/dst');
+$st = $jobs->read($id);
+check('moving into the folder it is already in changes nothing', ($st['state'] ?? '') === 'done' && is_dir($web . '/dst/mv') && ! is_dir($web . '/dst/mv (1)'), json_encode($st));
+$id = newJob($jobs, 'move');
+(new TransferJob($storage, $jobs))->run($id, 'move', [['path' => '/site/web/dst', 'type' => 'dir']], '/site/web/dst/mv', '/site/web');
+$st = $jobs->read($id);
+check('a folder is never moved into itself', ($st['state'] ?? '') === 'error' && is_dir($web . '/dst/mv'), json_encode($st));
+check('move and copy are job kinds, their states count as running', UnzipJob::kindOf(['kind' => 'copy']) === 'copy' && UnzipJob::kindOf(['kind' => 'move']) === 'move'
+    && UnzipJob::isActive(['state' => 'transferring']) && UnzipJob::isActive(['state' => 'moving']));
+check('a stalled copy says so', strpos(UnzipJob::present(['kind' => 'copy', 'state' => 'transferring', 'updated' => 1])['message'] ?? '', 'copy stopped') !== false);
 
 echo "== upload save\n";
 $data = str_repeat('0123456789abcdef', 300000);   // ~4.8 MB

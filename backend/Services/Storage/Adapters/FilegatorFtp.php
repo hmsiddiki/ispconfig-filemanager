@@ -34,6 +34,23 @@ class FilegatorFtp extends Ftp
         return parent::deleteDir($dirname);
     }
 
+    /**
+     * One DELE and nothing else. Flysystem's delete() first asks whether the file is there (a CWD attempt and a LIST, which opens a
+     * new data connection): four round trips per file where one does. False when it failed or the file was not there.
+     */
+    public function deleteNow($path): bool
+    {
+        return @ftp_delete($this->getConnection(), $path);
+    }
+
+    /** One RMD of a folder expected to be empty; false when it is not empty or not there (deleteDir() then lists and empties it). */
+    public function removeEmptyDir($dirname): bool
+    {
+        $this->known_dirs = [];
+
+        return @ftp_rmdir($this->getConnection(), $dirname);
+    }
+
 
     /**
      * Normalize a file entry.

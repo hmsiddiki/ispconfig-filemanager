@@ -130,6 +130,60 @@ check('overwrite replaced .git/HEAD', file_get_contents($root . '/home/site/plug
 check('keep both: the extension-less HEAD got "HEAD (1)" next to it, inside .git', is_file($root . '/home/site/plugins/qc/.git/HEAD (1)'),
     implode(', ', array_map('basename', glob($root . '/home/site/plugins/qc/.git/*'))));
 
+echo "== a zip made on Windows (\"\\\" between folders, folder entries ending in \"\\\"), folder attributes, links\n";
+$wz = $root . '/home/site/win.zip';
+$z = new ZipArchive();
+$z->open($wz, ZipArchive::CREATE);
+$z->addFromString('content\\', '');                               // Compress-Archive (Windows PowerShell 5.1) writes these
+$z->addFromString('content\\themes\\', '');
+$z->addFromString('content\\themes\\default\\', '');
+$z->addFromString('content\\themes\\default\\style.css', 'body{}');
+$z->addFromString('content\\plugins\\', '');                      // an empty folder
+$z->addFromString('index.php', '<?php // root');
+$z->addFromString('dosdir', '');                                  // a folder known only by its MS-DOS directory bit
+$z->setExternalAttributesName('dosdir', ZipArchive::OPSYS_DOS, 0x10);
+$z->addFromString('unixdir', '');                                 // a folder known only by its Unix file type
+$z->setExternalAttributesName('unixdir', ZipArchive::OPSYS_UNIX, 040755 << 16);
+$z->addFromString('dosfile.txt', 'not a folder');                // DOS directory bit on a file with content: still a file
+$z->setExternalAttributesName('dosfile.txt', ZipArchive::OPSYS_DOS, 0x10);
+$z->addFromString('evil-link', '/etc/passwd');                    // a symbolic link: must never be made
+$z->setExternalAttributesName('evil-link', ZipArchive::OPSYS_UNIX, 0120777 << 16);
+$z->close();
+$idw = bin2hex(random_bytes(12));
+$jobs->write($idw, ['state' => 'queued', 'started' => time()]);
+(new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp'))->run($idw, '/site/win.zip', '/site/win');
+$st = $jobs->read($idw);
+$w = $root . '/home/site/win';
+check('folders ending in "\\" are folders, not empty files', is_dir("$w/content") && is_dir("$w/content/themes") && is_dir("$w/content/themes/default") && is_dir("$w/content/plugins"),
+    implode(', ', array_map(function ($p) { return basename($p) . (is_dir($p) ? '/' : ''); }, glob("$w/content/*") ?: [])));
+check('the file inside lands in its folder', is_file("$w/content/themes/default/style.css") && file_get_contents("$w/content/themes/default/style.css") === 'body{}');
+check('nothing lands one level up', ! file_exists("$w/content/default") && ! file_exists("$w/default") && ! file_exists("$w/style.css"));
+check('no file names with "\\" in them', array_filter(glob("$w/*") ?: [], function ($p) { return strpos(basename($p), '\\') !== false; }) === []);
+check('a folder known only by its DOS or Unix attribute is a folder', is_dir("$w/dosdir") && is_dir("$w/unixdir"));
+check('a file that has the DOS bit but content stays a file', is_file("$w/dosfile.txt") && file_get_contents("$w/dosfile.txt") === 'not a folder');
+check('the link is not made, as a link or as a file', ! file_exists("$w/evil-link") && ! is_link("$w/evil-link"));
+check('the link is reported', ($st['failed'] ?? 0) === 1 && strpos(json_encode($st['errors'] ?? $st), 'skipped a link') !== false, json_encode($st));
+check('the rest is done', ($st['state'] ?? '') === 'done' && is_file("$w/index.php"), json_encode($st));
+
+echo "== a file where the archive needs a folder\n";
+@mkdir($root . '/home/site/blocked', 0777, true);
+file_put_contents($root . '/home/site/blocked/content', 'I am a file');
+$bz = $root . '/home/site/blocked.zip';
+$z = new ZipArchive();
+$z->open($bz, ZipArchive::CREATE);
+$z->addFromString('content/themes/x.php', '<?php // x');
+$z->addFromString('other.txt', 'fine');
+$z->close();
+$idb = bin2hex(random_bytes(12));
+$jobs->write($idb, ['state' => 'queued', 'started' => time()]);
+(new UnzipJob(makeStorage($root), $jobs, $root . '/work/tmp'))->run($idb, '/site/blocked.zip', '/site/blocked');
+$st = $jobs->read($idb);
+$b = $root . '/home/site/blocked';
+check('the file in the way is left as it is', is_file("$b/content") && file_get_contents("$b/content") === 'I am a file');
+check('the entry is not written anywhere else', ! file_exists("$b/themes") && ! file_exists("$b/x.php") && ! file_exists("$b/themes/x.php"));
+check('it is reported as a file in the way', ($st['failed'] ?? 0) === 1 && strpos(json_encode($st['errors'] ?? $st), 'in the way') !== false, json_encode($st));
+check('the other entries are unpacked', is_file("$b/other.txt"));
+
 echo "== numbering a taken name changes only the name, never the folders\n";
 $fsn = makeStorage($root);
 foreach ([

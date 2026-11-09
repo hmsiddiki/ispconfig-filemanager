@@ -433,17 +433,7 @@ export default {
       if (! t) return
       e.preventDefault()
       e.stopPropagation() // not an upload
-      this.isLoading = true
-      api.moveItems({ destination: t.path, items })
-        .then(() => {
-          this.isLoading = false
-          this.checked = []
-          this.loadFiles()
-        })
-        .catch(error => {
-          this.isLoading = false
-          this.handleError(error)
-        })
+      this.startTransfer('move', items, t.path)
     },
     onDragEnd() {
       this.dragItems = null
@@ -560,6 +550,27 @@ export default {
     refreshJobs() {
       if (this.$refs.unzipJobs) this.$refs.unzipJobs.refresh()
     },
+    /**
+     * Copy or move in the background: the server answers at once and a progress card follows the job, which goes on when the page is
+     * left or reloaded. Items being moved leave the list now, like deleted ones (the job list keeps them out, also after a reload).
+     */
+    startTransfer(kind, items, destination) {
+      if (!items.length) return
+      if (kind === 'move') {
+        items.forEach(i => this.$set(this.deleting, i.path, true))
+        this.hideDeleting()
+      }
+      api.startTransfer({ kind, items, destination, folder: this.$store.state.cwd.location })
+        .then(() => this.refreshJobs())
+        .catch(error => {
+          if (kind === 'move') {
+            items.forEach(i => this.$delete(this.deleting, i.path))
+            this.loadFiles()
+          }
+          this.handleError(error)
+        })
+      this.checked = []
+    },
     /** The paths the running background deletes are removing (from the job list, so also after a reload). */
     onDeleting(paths) {
       const next = {}
@@ -634,20 +645,7 @@ export default {
         component: Tree,
         events: {
           selected: dir => {
-            this.isLoading = true
-            api.copyItems({
-              destination: dir.path,
-              items: item ? [item] : this.getSelected(),
-            })
-              .then(() => {
-                this.isLoading = false
-                this.loadFiles()
-              })
-              .catch(error => {
-                this.isLoading = false
-                this.handleError(error)
-              })
-            this.checked = []
+            this.startTransfer('copy', item ? [item] : this.getSelected(), dir.path)
           }
         },
       })
@@ -659,20 +657,7 @@ export default {
         component: Tree,
         events: {
           selected: dir => {
-            this.isLoading = true
-            api.moveItems({
-              destination: dir.path,
-              items: item ? [item] : this.getSelected(),
-            })
-              .then(() => {
-                this.isLoading = false
-                this.loadFiles()
-              })
-              .catch(error => {
-                this.isLoading = false
-                this.handleError(error)
-              })
-            this.checked = []
+            this.startTransfer('move', item ? [item] : this.getSelected(), dir.path)
           }
         },
       })

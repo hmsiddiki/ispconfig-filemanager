@@ -94,6 +94,18 @@ class FilegatorSftp extends AbstractAdapter
         return $this->getConnection()->delete($this->full($dirname), true);
     }
 
+    /** One remove request, without asking first whether the file is there. */
+    public function deleteNow($path): bool
+    {
+        return (bool) $this->getConnection()->delete($this->full($path), false);
+    }
+
+    /** One rmdir request of a folder expected to be empty; false when it is not empty or not there. */
+    public function removeEmptyDir($dirname): bool
+    {
+        return (bool) $this->getConnection()->rmdir($this->full($dirname));
+    }
+
     public function createDir($dirname, Config $config)
     {
         return $this->getConnection()->mkdir($this->full($dirname), -1, true)

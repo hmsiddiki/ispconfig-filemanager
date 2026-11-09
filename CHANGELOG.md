@@ -2,6 +2,17 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.2
+
+- **Copy and Move run in the background**, like Delete, Zip and Unzip. They answer at once, a progress card follows the job ("Copying: n / m files", "Moving: n / m items") with a Cancel button, and leaving, reloading or closing the page does not stop them. Both used to run inside the browser's request, where the web server's time limit or leaving the page could stop a large copy half-way without a word. Items being moved leave the list at once. Drag and drop onto a folder uses the same background move.
+  - A name that is taken in the destination gets a number (`photos (1)`), for copy and move alike; nothing is overwritten. Moving an item into the folder it is already in changes nothing (it used to be renamed to `name (1)`). A folder is never copied or moved into itself.
+  - A copy no longer lists the whole destination folder to decide whether its name is taken, and no longer asks before each file whether the source is there and the destination is not: it lists each source folder once, then reads and writes each file once.
+- **Delete is several times faster over FTP.** Each file was one delete command plus a check before it (a `CWD` and a `LIST` with a data connection of its own); it is now the delete command alone, and the check is made only when the delete fails (a file that was already gone still counts as deleted). Each emptied folder is removed with one command instead of being listed again first; only a folder that still holds something falls back to the full listing.
+- **Unzip writes faster over FTP** into folders that already exist: a file's name was checked twice before writing it (once by the file manager, once more by the storage library), and each existing folder took two questions. Now one each.
+- **Zips made on Windows unpack correctly.** Some Windows tools (Windows PowerShell's `Compress-Archive`, .NET) write `\` between folders and end folder entries with `\` instead of `/`. Such a folder entry was stored as an empty file (`content/themes` as a 0-byte file), and the files meant for it landed one level up. Folder entries are now recognised by a trailing `/` or `\`, and by the folder flag the archive itself records (MS-DOS or Unix), for archivers that write folders with no trailing separator.
+- **Unzip never makes links.** A symbolic link stored in an uploaded zip could point anywhere on the server: it is skipped and named in the result ("skipped a link").
+- **Unzip says when a file is in the way of a folder** ("a file is in the way of the folder ...") and leaves that file and the entries meant for the folder alone. It used to take the file for the folder, and over FTP the folder's contents were written one level up.
+
 ## 1.5.1
 
 - **Unzipping over existing files no longer makes endless " (1)" copies.** A file that was already there got a numbered name, but the numbering looked at the whole path: for a file without an extension inside a folder with a dot in its name (`.git/HEAD`, `jquery.ui/LICENSE`) it renamed the folder instead, and wrote the file into a new folder ` (1).git`. Unzipping a plugin over its live copy made ` (1).git`, ` (2).git` ... and never seemed to end. Now only the file name gets the number (`HEAD (1)`, `photo (1).jpg`, `.htaccess (1)`).

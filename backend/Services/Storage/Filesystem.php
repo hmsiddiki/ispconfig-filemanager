@@ -143,6 +143,51 @@ class Filesystem implements Service
         return $this->storage->delete($this->applyPathPrefix($path));
     }
 
+    /**
+     * Delete a file with one request to the storage (background jobs, which delete many). deleteFile() asks first whether the file is
+     * there, over FTP a CWD and a LIST with a data connection of its own. Only when the delete fails is that question asked, so a file
+     * that was already gone still counts as deleted. True when the file is gone.
+     */
+    public function deleteFileNow(string $path): bool
+    {
+        $p = Util::normalizePath($this->applyPathPrefix($path));
+        $adapter = $this->storage->getAdapter();
+        if (method_exists($adapter, 'deleteNow')) {
+            $ok = $adapter->deleteNow($p);
+        } elseif ($adapter instanceof \League\Flysystem\Adapter\Local) {
+            $ok = @unlink($adapter->applyPathPrefix($p));
+        } else {
+            try {
+                return (bool) $this->storage->delete($p);
+            } catch (\League\Flysystem\FileNotFoundException $e) {
+                return true;
+            }
+        }
+
+        return $ok || ! $this->storage->has($p);
+    }
+
+    /**
+     * Remove a folder the job has already emptied, with one request. When that fails (something is still in it that the listing did not
+     * show, or the storage refuses), the full deleteDir() lists and empties it, as before. True when the folder is gone.
+     */
+    public function removeEmptyDir(string $path): bool
+    {
+        $p = Util::normalizePath($this->applyPathPrefix($path));
+        $adapter = $this->storage->getAdapter();
+        if (method_exists($adapter, 'removeEmptyDir')) {
+            if ($adapter->removeEmptyDir($p)) {
+                return true;
+            }
+        } elseif ($adapter instanceof \League\Flysystem\Adapter\Local) {
+            if (@rmdir($adapter->applyPathPrefix($p))) {
+                return true;
+            }
+        }
+
+        return (bool) $this->storage->deleteDir($p);
+    }
+
     public function readStream(string $path): array
     {
         if ($this->isDir($path)) {
@@ -217,7 +262,7 @@ class Filesystem implements Service
             $destination = $this->upcountName($destination);
         }
 
-        return $this->storage->putStream($destination, $resource) ? $this->getBaseName($destination) : null;
+        return $this->writeDirect($destination, $resource) ? $this->getBaseName($destination) : null;
     }
 
     public function move(string $from, string $to): bool
@@ -256,7 +301,40 @@ class Filesystem implements Service
             }
         }
 
-        return $this->storage->putStream($destination, $resource);
+        return $this->writeDirect($destination, $resource);
+    }
+
+    /**
+     * Write a stream to a path already decided on (free, or to be overwritten), with one write to the storage. Flysystem's putStream()
+     * asks first whether the file exists, and over FTP that question is a CWD and a LIST with a data connection of its own; the callers
+     * have just asked it themselves. The adapter's write creates or overwrites the file, keeping an existing file's permissions.
+     */
+    private function writeDirect(string $destination, $resource): bool
+    {
+        if (is_resource($resource) && (stream_get_meta_data($resource)['seekable'] ?? false) && ftell($resource) !== 0) {
+            rewind($resource);
+        }
+
+        return (bool) $this->storage->getAdapter()->writeStream(Util::normalizePath($destination), $resource, new Config());
+    }
+
+    /**
+     * Find out with one question whether $path is a file, a folder or nothing ('file', 'dir' or null). fileExists() and isDir() are two
+     * questions, over FTP each of them a round trip or a listing.
+     */
+    public function typeOf(string $path): ?string
+    {
+        $p = Util::normalizePath($this->applyPathPrefix($path));
+        if ($p === '') {
+            return 'dir';
+        }
+        try {
+            $meta = $this->storage->getAdapter()->getMetadata($p);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return is_array($meta) ? (($meta['type'] ?? 'file') === 'dir' ? 'dir' : 'file') : null;
     }
 
     /**
@@ -280,7 +358,7 @@ class Filesystem implements Service
     {
         $destination = $this->joinPaths($this->applyPathPrefix($path), $name);
 
-        return $this->storage->putStream($destination, $resource);
+        return $this->writeDirect($destination, $resource);
     }
 
     /**

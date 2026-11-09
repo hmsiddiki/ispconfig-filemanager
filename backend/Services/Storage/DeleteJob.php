@@ -83,7 +83,8 @@ class DeleteJob
                 }
             }
 
-            // deepest first, so each folder is already empty when it is removed; deleteDir() also removes anything the listing did not show
+            // deepest first, so each folder is already empty when it is removed: one RMD each. Only a folder that still holds something the
+            // listing did not show falls back to the full deleteDir(), which lists and empties it.
             usort($dirs, static function ($a, $b) {
                 return substr_count($b, '/') <=> substr_count($a, '/');
             });
@@ -91,7 +92,7 @@ class DeleteJob
                 $this->progress($id, $base + ['state' => 'deleting', 'done' => $done, 'total' => $total, 'failed' => $failed, 'current' => ltrim($dir, '/') . '/']);
                 $ok = false;
                 try {
-                    $ok = (bool) $this->storage->deleteDir($dir);
+                    $ok = $this->storage->removeEmptyDir($dir);
                 } catch (\Throwable $e) {
                     $ok = false;
                 }
@@ -171,10 +172,11 @@ class DeleteJob
         return [array_values(array_unique($files)), array_values(array_unique($dirs)), $tops];
     }
 
+    /** One request per file (deleteFileNow); a file that is already gone counts as deleted. */
     protected function deleteFile(string $path): bool
     {
         try {
-            return (bool) $this->storage->deleteFile($path);
+            return $this->storage->deleteFileNow($path);
         } catch (FileNotFoundException $e) {
             return true;   // already gone
         } catch (\Throwable $e) {

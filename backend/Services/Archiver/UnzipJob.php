@@ -70,19 +70,19 @@ class UnzipJob
 
     /**
      * Running states of every background job kind: unzip (copying, extracting), zip (listing, zipping, uploading), delete (listing, deleting)
-     * and the last step of a large upload (storing).
+     * the last step of a large upload (storing), copy (listing, transferring) and move (moving).
      */
     public static function isActive(array $state): bool
     {
-        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading', 'deleting', 'storing'], true);
+        return in_array($state['state'] ?? '', ['queued', 'copying', 'extracting', 'listing', 'zipping', 'uploading', 'deleting', 'storing', 'transferring', 'moving'], true);
     }
 
-    /** 'unzip', 'zip', 'delete' or 'upload' (jobs written before zip jobs existed have no kind: they are unzips). */
+    /** 'unzip', 'zip', 'delete', 'upload', 'copy' or 'move' (jobs written before zip jobs existed have no kind: they are unzips). */
     public static function kindOf(array $state): string
     {
         $kind = $state['kind'] ?? 'unzip';
 
-        return in_array($kind, ['zip', 'delete', 'upload'], true) ? $kind : 'unzip';
+        return in_array($kind, ['zip', 'delete', 'upload', 'copy', 'move'], true) ? $kind : 'unzip';
     }
 
     /** The state as the browser should see it: a job that is "running" but silent for too long has died. */
@@ -95,6 +95,8 @@ class UnzipJob
                 'unzip' => 'The unzip stopped unexpectedly. Files extracted so far were kept.',
                 'delete' => 'The delete stopped unexpectedly. Some items may not have been deleted.',
                 'upload' => 'Saving the upload stopped unexpectedly. Upload the file again.',
+                'copy' => 'The copy stopped unexpectedly. Files copied so far were kept.',
+                'move' => 'The move stopped unexpectedly. Items moved so far stay moved.',
             ][self::kindOf($state)];
         }
         $state['kind'] = self::kindOf($state);
@@ -230,8 +232,18 @@ class UnzipJob
                 continue;
             }
 
+            $type = self::entryType($zip, $i, $entry);
+            if ($type === 'link') {
+                // a link in an uploaded archive could point anywhere on the server: never made, only reported
+                $failed++;
+                if (count($errors) < 5) {
+                    $errors[] = $path . ': skipped a link';
+                }
+                continue;
+            }
+
             try {
-                if (substr($entry, -1) === '/') {
+                if ($type === 'dir') {
                     $this->ensureDir($destination, $path);
                 } else {
                     $this->storeFile(static function () use ($zip, $entry) {
@@ -242,7 +254,8 @@ class UnzipJob
             } catch (\Throwable $e) {
                 $failed++;
                 if (count($errors) < 5) {
-                    $errors[] = $path . ': ' . (new \ReflectionClass($e))->getShortName();
+                    // our own explanations are shown as they are; other errors only by kind (their text can hold server paths)
+                    $errors[] = $path . ': ' . ($e instanceof \DomainException ? $e->getMessage() : (new \ReflectionClass($e))->getShortName());
                 }
             }
         }
@@ -267,11 +280,15 @@ class UnzipJob
             $current = $parent === '' ? $part : $parent . '/' . $part;
             if (! isset($this->created[$current])) {
                 $full = rtrim($destination, '/') . '/' . $current;
-                if (! $this->storage->fileExists($full)) {
+                $type = $this->storage->typeOf($full);   // one question: file, folder or nothing
+                if ($type === null) {
                     if (! $this->storage->ensureDirectory($full)) {
                         throw new \RuntimeException('Cannot create the folder');
                     }
                     $this->fresh[$current] = true;
+                } elseif ($type !== 'dir') {
+                    // a file has the folder's name: say so. Taking it for the folder sent its contents one level up over FTP.
+                    throw new \DomainException('a file is in the way of the folder "' . $current . '"');
                 } elseif ($parent !== '' && isset($this->fresh[$parent])) {
                     $this->fresh[$current] = true;
                 }
@@ -439,6 +456,38 @@ class UnzipJob
             }
         }
         @rmdir($dir);
+    }
+
+    /**
+     * What a zip entry is: 'dir', 'link' or 'file'. A folder entry ends in "/", or in "\" in zips made by some Windows tools,
+     * which earlier versions stored as empty files; the entry's own attributes are checked too (MS-DOS directory bit, Unix file
+     * type), for archivers that write folders without a trailing separator.
+     */
+    public static function entryType(\ZipArchive $zip, int $index, string $name): string
+    {
+        $last = substr($name, -1);
+        $opsys = 0;
+        $attr = 0;
+        $have = $zip->getExternalAttributesIndex($index, $opsys, $attr);
+        if ($have && $opsys === \ZipArchive::OPSYS_UNIX) {
+            $kind = ($attr >> 16) & 0170000;
+            if ($kind === 0120000) {
+                return 'link';
+            }
+            if ($kind === 0040000) {
+                return 'dir';
+            }
+        }
+        if ($last === '/' || $last === '\\') {
+            return 'dir';
+        }
+        if ($have && $opsys === \ZipArchive::OPSYS_DOS && ($attr & 0x10)) {
+            $stat = $zip->statIndex($index);
+
+            return is_array($stat) && (int) ($stat['size'] ?? 0) === 0 ? 'dir' : 'file';
+        }
+
+        return 'file';
     }
 
     /** An archive entry name made safe for the storage: no drive letters, no leading slash, no "..", no control characters. Null when nothing is left. */

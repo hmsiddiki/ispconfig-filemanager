@@ -368,6 +368,18 @@ return [
             'read', 'write', 'zip',
         ],
     ],
+    // copy and move as background jobs (kind=copy|move); progress and cancel through /unzipjob/status and /unzipjob/cancel
+    [
+        'route' => [
+            'POST', '/transferjob', '\Filegator\Controllers\TransferJobController@start',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'read', 'write',
+        ],
+    ],
     // delete as a background job; progress and cancel through /unzipjob/status and /unzipjob/cancel
     [
         'route' => [
