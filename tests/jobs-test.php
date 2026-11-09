@@ -112,8 +112,9 @@ $refusing = function (string $word) use ($root) {
             public function __construct($root, $word) { parent::__construct($root); $this->word = $word; }
             public function deleteNow($path): bool { return strpos($path, $this->word) === false && @unlink($this->applyPathPrefix($path)); }
             public function has($path) { return strpos($path, $this->word) === false && parent::has($path); }
-            // list names as FTP does: Local alone turns "\" into "/" in listed paths
-            protected function getFilePath(\SplFileInfo $file) { return trim($this->removePathPrefix($file->getPathname()), '/'); }
+            // list names as FTP does: Local alone turns every "\" into "/" in listed paths; only the system's own separator is turned here
+            // (a no-op on Linux, where "\" can be part of a name; "\" on Windows, where it is the separator)
+            protected function getFilePath(\SplFileInfo $file) { return trim(str_replace(DIRECTORY_SEPARATOR, '/', $this->removePathPrefix($file->getPathname())), '/'); }
         };
     }]);
     $fs->setPathPrefix('/');
