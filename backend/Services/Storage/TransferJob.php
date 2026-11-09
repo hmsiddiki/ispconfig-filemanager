@@ -35,11 +35,15 @@ class TransferJob
         $this->jobs = $jobs;
     }
 
-    /** A storage path in one form: "/a/b", never "..", "." or a trailing slash. Null for a path that climbs or is empty. */
+    /**
+     * A storage path in one form: "/a/b", never "..", "." or a trailing slash. "\" stays part of a name (Filesystem::cleanPath).
+     * Null for a path that climbs or holds control characters.
+     */
     public static function clean(string $path): ?string
     {
-        $path = '/' . trim(str_replace('\\', '/', $path), '/');
-        if (preg_match('#(^|/)\.\.?(/|$)#', $path)) {
+        try {
+            $path = '/' . Filesystem::cleanPath($path);
+        } catch (\LogicException $e) {
             return null;
         }
 
@@ -209,7 +213,7 @@ class TransferJob
                     if ($child['type'] === 'back') {
                         continue;
                     }
-                    $name = basename(str_replace('\\', '/', (string) $child['path']));
+                    $name = (string) substr(strrchr('/' . (string) $child['path'], '/'), 1);   // after the last "/": a "\" stays in the name
                     $childFrom = rtrim($from, '/') . '/' . $name;
                     $childTo = rtrim($to, '/') . '/' . $name;
                     if ($child['type'] === 'dir') {

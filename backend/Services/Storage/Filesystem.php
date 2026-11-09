@@ -55,12 +55,12 @@ class Filesystem implements Service
      */
     public function ensureDirectory(string $path): bool
     {
-        $destination = Util::normalizePath($this->applyPathPrefix($path));
-        if ($destination === '' || $this->storage->has($destination)) {
+        $destination = self::cleanPath($this->applyPathPrefix($path));
+        if ($destination === '' || $this->exists($destination)) {
             return true;
         }
 
-        return (bool) $this->storage->createDir($destination);
+        return (bool) $this->storage->getAdapter()->createDir($destination, new Config());
     }
 
     public function createFile(string $path, string $name)
@@ -76,9 +76,7 @@ class Filesystem implements Service
 
     public function fileExists(string $path)
     {
-        $path = $this->applyPathPrefix($path);
-
-        return $this->storage->has($path);
+        return $this->exists(self::cleanPath($this->applyPathPrefix($path)));
     }
 
     public function isDir(string $path)
@@ -144,13 +142,60 @@ class Filesystem implements Service
     }
 
     /**
+     * A storage path made safe, keeping "\" as part of a name. Flysystem's own cleaner turns every "\" into "/", which is right on
+     * Windows but wrong on the Linux servers this runs on: there "\" is an ordinary character of a file name. A file such as
+     * "admin\x.php" (left by a zip made on Windows) was then asked for as "admin/x.php", which does not exist, so it could not be
+     * deleted, renamed or moved, and a delete even counted it as already gone. Empty and "." parts are dropped; ".." anywhere, also
+     * between backslashes (an FTP server on Windows would read "\" as a folder separator), and control characters are refused.
+     */
+    public static function cleanPath(string $path): string
+    {
+        if (preg_match('/[\x00-\x1f\x7f]/', $path)) {
+            throw new \LogicException('Control character in path');
+        }
+        $parts = [];
+        foreach (explode('/', $path) as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+            if (preg_match('#(^|\\\\)\.\.(\\\\|$)#', $part)) {
+                throw new \LogicException('Path outside root');
+            }
+            $parts[] = $part;
+        }
+
+        return implode('/', $parts);
+    }
+
+    /** Is something at this (already clean) path? Asked of the storage directly, so the path is not changed on the way. */
+    private function exists(string $clean): bool
+    {
+        return $clean === '' || (bool) $this->storage->getAdapter()->has($clean);
+    }
+
+    /** Rename $from to $to (both with the path prefix); a taken $to gets a number ("name (1)"). */
+    private function renameClean(string $from, string $to): bool
+    {
+        $from = self::cleanPath($from);
+        while ($this->exists(self::cleanPath($to))) {
+            $to = $this->upcountName($to);
+        }
+        $to = self::cleanPath($to);
+        if ($from === '' || $to === '' || ! $this->exists($from)) {
+            return false;
+        }
+
+        return (bool) $this->storage->getAdapter()->rename($from, $to);
+    }
+
+    /**
      * Delete a file with one request to the storage (background jobs, which delete many). deleteFile() asks first whether the file is
      * there, over FTP a CWD and a LIST with a data connection of its own. Only when the delete fails is that question asked, so a file
      * that was already gone still counts as deleted. True when the file is gone.
      */
     public function deleteFileNow(string $path): bool
     {
-        $p = Util::normalizePath($this->applyPathPrefix($path));
+        $p = self::cleanPath($this->applyPathPrefix($path));
         $adapter = $this->storage->getAdapter();
         if (method_exists($adapter, 'deleteNow')) {
             $ok = $adapter->deleteNow($p);
@@ -164,7 +209,7 @@ class Filesystem implements Service
             }
         }
 
-        return $ok || ! $this->storage->has($p);
+        return $ok || ! $this->exists($p);
     }
 
     /**
@@ -173,7 +218,10 @@ class Filesystem implements Service
      */
     public function removeEmptyDir(string $path): bool
     {
-        $p = Util::normalizePath($this->applyPathPrefix($path));
+        $p = self::cleanPath($this->applyPathPrefix($path));
+        if ($p === '') {
+            return false;   // never the home folder itself
+        }
         $adapter = $this->storage->getAdapter();
         if (method_exists($adapter, 'removeEmptyDir')) {
             if ($adapter->removeEmptyDir($p)) {
@@ -185,7 +233,7 @@ class Filesystem implements Service
             }
         }
 
-        return (bool) $this->storage->deleteDir($p);
+        return (bool) $adapter->deleteDir($p);
     }
 
     public function readStream(string $path): array
@@ -258,7 +306,7 @@ class Filesystem implements Service
     public function storeUnique(string $path, string $name, $resource): ?string
     {
         $destination = $this->joinPaths($this->applyPathPrefix($path), $name);
-        while ($this->storage->has($destination)) {
+        while ($this->exists(self::cleanPath($destination))) {
             $destination = $this->upcountName($destination);
         }
 
@@ -267,35 +315,21 @@ class Filesystem implements Service
 
     public function move(string $from, string $to): bool
     {
-        $from = $this->applyPathPrefix($from);
-        $to = $this->applyPathPrefix($to);
-
-        while ($this->storage->has($to)) {
-            $to = $this->upcountName($to);
-        }
-
-        return $this->storage->rename($from, $to);
+        return $this->renameClean($this->applyPathPrefix($from), $this->applyPathPrefix($to));
     }
 
     public function rename(string $destination, string $from, string $to): bool
     {
-        $from = $this->joinPaths($this->applyPathPrefix($destination), $from);
-        $to = $this->joinPaths($this->applyPathPrefix($destination), $to);
-
-        while ($this->storage->has($to)) {
-            $to = $this->upcountName($to);
-        }
-
-        return $this->storage->rename($from, $to);
+        return $this->renameClean($this->joinPaths($this->applyPathPrefix($destination), $from), $this->joinPaths($this->applyPathPrefix($destination), $to));
     }
 
     public function store(string $path, string $name, $resource, bool $overwrite = false): bool
     {
         $destination = $this->joinPaths($this->applyPathPrefix($path), $name);
 
-        while ($this->storage->has($destination)) {
+        while ($this->exists(self::cleanPath($destination))) {
             if ($overwrite) {
-                $this->storage->delete($destination);
+                $this->storage->getAdapter()->delete(self::cleanPath($destination));
             } else {
                 $destination = $this->upcountName($destination);
             }
@@ -315,7 +349,7 @@ class Filesystem implements Service
             rewind($resource);
         }
 
-        return (bool) $this->storage->getAdapter()->writeStream(Util::normalizePath($destination), $resource, new Config());
+        return (bool) $this->storage->getAdapter()->writeStream(self::cleanPath($destination), $resource, new Config());
     }
 
     /**
@@ -324,7 +358,7 @@ class Filesystem implements Service
      */
     public function typeOf(string $path): ?string
     {
-        $p = Util::normalizePath($this->applyPathPrefix($path));
+        $p = self::cleanPath($this->applyPathPrefix($path));
         if ($p === '') {
             return 'dir';
         }
@@ -344,7 +378,7 @@ class Filesystem implements Service
      */
     public function storeNew(string $path, string $name, $resource): bool
     {
-        $destination = Util::normalizePath($this->joinPaths($this->applyPathPrefix($path), $name));
+        $destination = self::cleanPath($this->joinPaths($this->applyPathPrefix($path), $name));
 
         return (bool) $this->storage->getAdapter()->writeStream($destination, $resource, new Config());
     }

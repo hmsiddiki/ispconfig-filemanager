@@ -36,7 +36,7 @@ class DeleteJob
     public static function label(array $items): string
     {
         if (count($items) === 1) {
-            $name = basename(str_replace('\\', '/', (string) ($items[0]['path'] ?? '')));
+            $name = (string) substr(strrchr('/' . rtrim((string) ($items[0]['path'] ?? ''), '/'), '/'), 1);   // a "\" stays in the name
 
             return $name !== '' ? $name : '/';
         }
@@ -130,8 +130,8 @@ class DeleteJob
         $tops = [];
 
         foreach ($items as $item) {
-            $path = '/' . trim(str_replace('\\', '/', (string) ($item['path'] ?? '')), '/');
-            if ($path === '/' || preg_match('#(^|/)\.\.?(/|$)#', $path)) {
+            $path = TransferJob::clean((string) ($item['path'] ?? ''));   // a "\" stays part of the name
+            if ($path === null || $path === '/') {
                 continue;   // never the home folder itself, never a path that climbs out
             }
             if (($item['type'] ?? '') === 'file') {

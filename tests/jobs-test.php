@@ -103,6 +103,45 @@ $id = newJob($jobs, 'delete');
 $st = $jobs->read($id);
 check('missing file counts as deleted', ($st['state'] ?? '') === 'done' && ($st['failed'] ?? 1) === 0, json_encode($st));
 
+echo "== paths: \"\\\" is part of a name, \"..\" is never allowed\n";
+foreach ([
+    'a/b\\c.txt' => 'a/b\\c.txt', '/web//admin\\x.php/' => 'web/admin\\x.php', './a/./b' => 'a/b', 'a\\' => 'a\\', '' => '',
+] as $in => $want) {
+    check('cleanPath(' . json_encode((string) $in) . ')', Filesystem::cleanPath((string) $in) === $want, var_export(Filesystem::cleanPath((string) $in), true));
+}
+foreach (['../x', 'a/../b', 'a\\..\\b', '..\\x', "bad\x01"] as $bad) {
+    $refused = false;
+    try { Filesystem::cleanPath($bad); } catch (\LogicException $e) { $refused = true; }
+    check('cleanPath refuses ' . json_encode($bad), $refused);
+}
+check('a job path keeps "\\" and refuses ".."', TransferJob::clean('/web/admin\\x.php') === '/web/admin\\x.php' && TransferJob::clean('/web/a\\..\\..\\etc') === null && TransferJob::clean('/web/../etc') === null);
+
+if (DIRECTORY_SEPARATOR === '/') {
+    // only where "\" can be part of a file name (Linux: the servers this runs on; on Windows it is a folder separator)
+    echo "== files with \"\\\" in their name (left by a zip made on Windows)\n";
+    mkdir($web . '/bs', 0777, true);
+    foreach (['admin\\a.php', 'admin\\b.php', 'content\\themes\\', 'keep.txt'] as $n) {
+        file_put_contents($web . '/bs/' . $n, 'x');
+    }
+    $id = newJob($jobs, 'delete');
+    (new DeleteJob($storage, $jobs))->run($id, [['path' => '/site/web/bs/admin\\a.php', 'type' => 'file'], ['path' => '/site/web/bs/content\\themes\\', 'type' => 'file']], '/site/web/bs');
+    $st = $jobs->read($id);
+    check('delete really removes them', ! file_exists($web . '/bs/admin\\a.php') && ! file_exists($web . '/bs/content\\themes\\') && ($st['files'] ?? 0) === 2, json_encode($st));
+    check('and nothing else', file_exists($web . '/bs/admin\\b.php') && file_exists($web . '/bs/keep.txt'));
+    check('rename keeps the "\\"', $storage->rename('/site/web/bs', 'admin\\b.php', 'renamed\\b.php') && file_exists($web . '/bs/renamed\\b.php') && ! file_exists($web . '/bs/admin\\b.php'));
+    mkdir($web . '/bs/to', 0777, true);
+    $id = newJob($jobs, 'move');
+    (new TransferJob($storage, $jobs))->run($id, 'move', [['path' => '/site/web/bs/renamed\\b.php', 'type' => 'file']], '/site/web/bs/to', '/site/web/bs');
+    check('move keeps the "\\"', file_exists($web . '/bs/to/renamed\\b.php') && ! file_exists($web . '/bs/renamed\\b.php'), json_encode($jobs->read($id)));
+    mkdir($web . '/bs/keep2', 0777, true);
+    $id = newJob($jobs, 'copy');
+    (new TransferJob($storage, $jobs))->run($id, 'copy', [['path' => '/site/web/bs/to', 'type' => 'dir']], '/site/web/bs/keep2', '/site/web/bs');
+    check('copy of a folder holding one keeps the "\\"', file_exists($web . '/bs/keep2/to/renamed\\b.php'), json_encode($jobs->read($id)));
+    check('a file with "\\" is seen as existing', $storage->fileExists('/site/web/bs/keep.txt') && $storage->fileExists('/site/web/bs/to/renamed\\b.php') && ! $storage->fileExists('/site/web/bs/to/renamed/b.php'));
+} else {
+    echo "== files with \"\\\" in their name: skipped on Windows (there \"\\\" is a folder separator); CI runs them on Linux\n";
+}
+
 echo "== delete leaves a folder that still holds something the listing did not show to the full deleteDir()\n";
 check('removeEmptyDir on a non-empty folder still removes it (fallback)', (function () use ($storage, $web) {
     mkdir($web . '/notempty/inner', 0777, true);

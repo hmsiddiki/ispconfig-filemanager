@@ -2,6 +2,11 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.5.3
+
+- **Files with `\` in their name can be deleted, renamed, moved and copied.** On the Linux servers ISPConfig runs on, `\` is an ordinary character of a file name, and a zip made on Windows can leave many such files (`admin\x.php`). The storage library turned every `\` into `/` on the way to the server, so it asked for `admin/x.php`, which does not exist: the file could not be deleted, renamed or moved, and a delete even reported it as deleted. Over FTP each of those failed deletes also cost the slowest path (a failed delete, then a `CWD` and a `LIST`). Paths now keep `\` as part of the name; `..` is still refused, also between backslashes.
+- A delete counts a file as already gone only when it really is not there under its own name.
+
 ## 1.5.2
 
 - **Copy and Move run in the background**, like Delete, Zip and Unzip. They answer at once, a progress card follows the job ("Copying: n / m files", "Moving: n / m items") with a Cancel button, and leaving, reloading or closing the page does not stop them. Both used to run inside the browser's request, where the web server's time limit or leaving the page could stop a large copy half-way without a word. Items being moved leave the list at once. Drag and drop onto a folder uses the same background move.
